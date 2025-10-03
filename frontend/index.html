@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Monopoly - Inicio</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.2/dist/minty/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+  <body>
+    <div class="container py-5">
+      <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6 text-center">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <h1 class="card-title mb-3">Monopoly - Inicio</h1>
+              <p class="text-muted">Bienvenido - configura la partida y comienza cuando quieras.</p>
+              <div class="d-grid gap-2">
+                <button id="btnPlay" class="btn btn-primary btn-lg">Jugar</button>
+                <button id="btnRanking" class="btn btn-outline-secondary btn-lg">Rankings</button>
+                <button id="btnExit" class="btn btn-danger btn-lg">Salir</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Selección de número de jugadores -->
+    <div class="modal fade" id="selectCountModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">¿Cuántos jugadores?</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-around">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="playerCount" id="pc2" value="2" checked>
+                <label class="form-check-label" for="pc2">2 jugadores</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="playerCount" id="pc3" value="3">
+                <label class="form-check-label" for="pc3">3 jugadores</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="playerCount" id="pc4" value="4">
+                <label class="form-check-label" for="pc4">4 jugadores</label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="btnCountNext" class="btn btn-primary">Siguiente</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Configurar jugadores -->
+    <div class="modal fade" id="playerConfigModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Configurar jugadores</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div id="playersContainer">
+              <!-- Aquí se inyectan dinámicamente los formularios de jugador -->
+            </div>
+            <div class="mt-2">
+              <small class="text-muted">Todos los campos son obligatorios <span class="required">*</span>.</small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="btnStartGame" class="btn btn-success" disabled>Iniciar juego</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: despedida -->
+    <div class="modal fade" id="goodbyeModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-body text-center">
+            <h5>Gracias por jugar Monopoly</h5>
+            <div class="mt-3">
+              <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS (Popper included) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- API wrapper para comunicación con backend -->
+    <script src="js/api.js"></script>
+    
+    <!-- Lógica de jugadores -->
+    <script src="js/players.js"></script>
+  </body>
+</html>

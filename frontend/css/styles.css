@@ -1,0 +1,47 @@
+/*Estilos generales*/
+body {
+  background-image: url('../images/inicioMonopoly.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+}
+
+/*Tarjeta inicio*/
+.card {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  padding: 20px;
+  max-width: 700px;
+  width: 100%;
+}
+
+/*Seleccion color ficha jugador*/
+.color-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-right: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s ease;
+}
+
+/*Tarjetas para datos de jugador*/
+.player-card {
+  border: 1px solid #e9ecef;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background-color: #f8f9fa;
+  transition: box-shadow 0.2s ease;
+}
+
+/*Datos obligtorios, * en rojo*/
+.required {
+  color: #dc3545;
+}
