@@ -129,9 +129,13 @@ class MonopolyBoard {
     squareDiv.dataset.squareType = square.type;
     
     // Aplicar posicionamiento grid dinámicamente
+    // 1. Obtiene la posición donde debe ir el cuadrado
     const position = this.getGridPosition(square.id);
+    // 2. Coloca el elemento en una columna específica
     squareDiv.style.gridColumn = position.column;
+    // 3. Coloca el elemento en una fila específica
     squareDiv.style.gridRow = position.row;
+
 
     // Agregar contenido según el tipo de casilla
     switch (square.type) {
@@ -198,7 +202,7 @@ class MonopolyBoard {
     }
 
     if (property.houses > 0) {
-      const houses = '🏠'.repeat(property.houses);
+      const houses = '🏠'.repeat(property.houses);m
       return `<div class="buildings">${houses}</div>`;
     }
 
@@ -245,7 +249,7 @@ class MonopolyBoard {
   renderTaxSquare(square) {
     return `
       <div class="square-content">
-        <div class="square-icon-medium">💰</div>
+        <div class="square-icon-small">💰</div>
         <div class="square-name">${square.name}</div>
         <div class="square-price">${square.action.money < 0 ? 'Paga' : 'Recibe'} $${Math.abs(square.action.money)}</div>
       </div>
@@ -310,9 +314,7 @@ class MonopolyBoard {
     });
   }
 
-  /**
-   * Inicializar controles del juego
-   */
+  // Inicializar controles del juego
   initializeGameControls() {
     const rollBtn = document.getElementById('rollDiceBtn');
     if (rollBtn) {
@@ -320,9 +322,7 @@ class MonopolyBoard {
     }
   }
 
-  /**
-   * Lanzar dados
-   */
+  //Lanzar dados
   rollDice() {
     const dice1 = Math.floor(Math.random() * 6) + 1;
     const dice2 = Math.floor(Math.random() * 6) + 1;
@@ -346,9 +346,7 @@ class MonopolyBoard {
     this.addToLog(`${this.players[this.currentPlayerIndex].nick_name} sacó ${total}`);
   }
 
-  /**
-   * Mover jugador
-   */
+  //Mover jugador
   movePlayer(playerIndex, steps) {
     const player = this.players[playerIndex];
     const oldPosition = player.position;

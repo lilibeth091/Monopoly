@@ -3,9 +3,7 @@ const MonopolyAPI = {
   // URL base del backend Flask
   BASE_URL: 'http://127.0.0.1:5000',
 
-  /**
-   * Función helper para hacer requests con manejo de errores
-   */
+  //Función helper para hacer requests con manejo de errores
   async request(endpoint, options = {}) {
     const url = `${this.BASE_URL}${endpoint}`;
     
@@ -29,32 +27,25 @@ const MonopolyAPI = {
     }
   },
 
-  /**
-   * Obtener lista de países
-   * GET /countries
-   */
+  /*Obtener lista de países
+   GET /countries*/
   async getCountries() {
     return this.request('/countries');
   },
 
-  /**
-   * Obtener estructura del tablero
-   * GET /board
-   */
+  /*Obtener estructura del tablero
+   GET /board*/
   async getBoard() {
     return this.request('/board');
   },
 
-  /**
-   * Obtener ranking de jugadores
-   * GET /ranking
-   */
+  /*Obtener ranking de jugadores
+  GET /ranking*/
   async getRanking() {
     return this.request('/ranking');
   },
 
-  /**
-   * Guardar puntaje de un jugador
+  /*Guardar puntaje de un jugador
    * POST /score-recorder
    * @param {string} nickName - Nickname del jugador
    * @param {number} score - Puntaje obtenido
@@ -71,18 +62,14 @@ const MonopolyAPI = {
     });
   },
 
-  /**
-   * Obtener una carta aleatoria de Caja de Comunidad
-   */
+  //Obtener una carta aleatoria de Caja de Comunidad
   async getCommunityChestCard() {
     const board = await this.getBoard();
     const cards = board.community_chest;
     return cards[Math.floor(Math.random() * cards.length)];
   },
 
-  /**
-   * Obtener una carta aleatoria de Sorpresa
-   */
+  //Obtener una carta aleatoria de Sorpresa
   async getChanceCard() {
     const board = await this.getBoard();
     const cards = board.chance;
