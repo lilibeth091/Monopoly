@@ -207,11 +207,11 @@ function populateColorOptions() {
       const id = `color_${col.id}_${idx}`;
       const wrapper = document.createElement('div');
       wrapper.className = 'form-check';
-      wrapper.style.marginRight = '8px';
+      wrapper.classList.add('me-2');
       wrapper.innerHTML = `
         <input class="form-check-input color-radio" type="radio" name="color_player_${idx}" id="${id}" value="${col.id}" data-hex="${col.hex}">
         <label class="form-check-label color-option-label" for="${id}">
-          <span class="color-swatch" style="background:${col.hex}"></span>
+          <span class="color-swatch color-${col.id}" data-hex="${col.hex}"></span>
           ${col.label}
         </label>
       `;
@@ -330,7 +330,12 @@ function gatherPlayersData() {
       money: 1500,
       position: 0,
       properties: [],
-      mortgaged: []
+      mortgaged: [],
+      
+      // NUEVAS PROPIEDADES PARA CÁRCEL
+      in_jail: false,
+      jail_turns: 0,
+      doubles_count: 0
     });
   });
 

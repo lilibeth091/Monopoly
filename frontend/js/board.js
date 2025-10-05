@@ -17,6 +17,13 @@ class MonopolyBoard {
         throw new Error('No se encontraron datos de jugadores');
       }
       this.players = JSON.parse(playersData);
+
+      // Asegurar que todos los jugadores tengan las propiedades de cárcel
+      this.players.forEach(player => {
+        if (player.in_jail === undefined) player.in_jail = false;
+        if (player.jail_turns === undefined) player.jail_turns = 0;
+        if (player.doubles_count === undefined) player.doubles_count = 0;
+      });
       
       // Renderizar el tablero
       this.render();
@@ -103,7 +110,7 @@ class MonopolyBoard {
     board.appendChild(this.renderCenter());
 
     boardContainer.appendChild(board);
-    
+
     // Renderizar panel de información de jugadores
     this.renderPlayersPanel();
   }
@@ -202,7 +209,7 @@ class MonopolyBoard {
     }
 
     if (property.houses > 0) {
-      const houses = '🏠'.repeat(property.houses);m
+      const houses = '🏠'.repeat(property.houses);
       return `<div class="buildings">${houses}</div>`;
     }
 
@@ -285,6 +292,10 @@ class MonopolyBoard {
       <div id="game-log" class="game-log"></div>
       <div id="dice-area" class="dice-area">
         <button id="rollDiceBtn" class="btn btn-primary">🎲 Lanzar dados</button>
+        <div class="mt-2">
+          <input type="number" id="manualDiceInput" class="form-control form-control-sm" 
+                 placeholder="Ingresa valor (1-12)" min="1" max="12" style="width: 165px; margin: 5px auto;">
+        </div>
         <div id="diceResult"></div>
       </div>
     `;
@@ -300,14 +311,39 @@ class MonopolyBoard {
     
     this.players.forEach((player, index) => {
       const isCurrentPlayer = index === this.currentPlayerIndex;
+
+      // bandera del país (usa el country_code que guardas al crear jugadores)
+    const code = (player.country_code || '').toUpperCase();
+    const flagUrl = code ?  `https://flagsapi.com/${code}/flat/24.png ` : null;
+
+    // lista de propiedades
+    const props = (player.properties || []);
+    const propsList = props.length
+      ? `<ul class="player-props">${props.map(p => `<li>${p.name}</li>`).join('')}</ul>`
+      :  `<ul class="player-props"><li><em>Sin propiedades</em></li></ul> `;
+
+        //identificar que el jugador esta en la carcel
+      const jailBadge = player.in_jail 
+        ? `<span class="badge bg-danger ms-2">🚔 En cárcel (${player.jail_turns}/3)</span>`
+        : '';
+      
+
       const playerDiv = document.createElement('div');
       playerDiv.className = `player-info ${isCurrentPlayer ? 'current-player' : ''}`;
+
+    
       playerDiv.innerHTML = `
         <div class="player-token" style="background-color: ${player.color_hex}"></div>
         <div class="player-details">
-          <strong>${player.nick_name}</strong>
+          <strong>
+          ${player.nick_name}
+          ${flagUrl ? `<img class="player-flag" src="${flagUrl}" alt="${code}">` : ''}
+          </strong>
+
+          ${jailBadge}
           <div>Dinero: $${player.money}</div>
-          <div>Propiedades: ${player.properties?.length || 0}</div>
+         <div>Propiedades: ${props.length}</div>
+        ${propsList}
         </div>
       `;
       panel.appendChild(playerDiv);
@@ -324,9 +360,41 @@ class MonopolyBoard {
 
   //Lanzar dados
   rollDice() {
-    const dice1 = Math.floor(Math.random() * 6) + 1;
-    const dice2 = Math.floor(Math.random() * 6) + 1;
-    const total = dice1 + dice2;
+    const currentPlayer = this.players[this.currentPlayerIndex];
+    
+    // Si está en cárcel, mostrar opciones primero
+    if (currentPlayer.in_jail) {
+      this.showJailOptions();
+      return;
+  }
+
+    let dice1, dice2, total;
+    const manualInput = document.getElementById('manualDiceInput');
+    
+    // Verificar si hay un valor manual ingresado
+    if (manualInput && manualInput.value) {
+      total = parseInt(manualInput.value);
+      
+      // Validar que esté en el rango correcto
+      if (total < 1 || total > 12) {
+        alert('⚠ El valor debe estar entre 1 y 12');
+        return;
+      }
+      
+      // Simular dos dados que sumen el total (para visualización)
+      dice1 = Math.floor(total / 2);
+      dice2 = total - dice1;
+      
+      // Limpiar el input después de usar
+      manualInput.value = '';
+    } else {
+      // Lanzamiento aleatorio normal
+      dice1 = Math.floor(Math.random() * 6) + 1;
+      dice2 = Math.floor(Math.random() * 6) + 1;
+      total = dice1 + dice2;
+    }
+
+    const isDoubles = dice1 === dice2;
 
     const diceResult = document.getElementById('diceResult');
     if (diceResult) {
@@ -335,19 +403,194 @@ class MonopolyBoard {
           <span class="die">${dice1}</span>
           <span class="die">${dice2}</span>
           <span class="total">Total: ${total}</span>
+          ${isDoubles ? '<span class="doubles-badge">¡PARES!</span>' : ''}
         </div>
       `;
     }
 
-    // Mover el jugador actual
-    this.movePlayer(this.currentPlayerIndex, total);
+    this.addToLog(`${currentPlayer.nick_name} sacó ${total}${isDoubles ? ' (pares)' : ''}`);
     
-    // Agregar al log
-    this.addToLog(`${this.players[this.currentPlayerIndex].nick_name} sacó ${total}`);
+    if (isDoubles) {
+      currentPlayer.doubles_count++;
+      
+      // Si saca 3 pares consecutivos, va a la cárcel
+      if (currentPlayer.doubles_count >= 3) {
+        this.addToLog(`${currentPlayer.nick_name} sacó 3 pares consecutivos!`);
+        this.sendToJail(this.currentPlayerIndex);
+        return;
+      }
+      
+      this.movePlayer(this.currentPlayerIndex, total, true);
+    } else {
+      currentPlayer.doubles_count = 0;
+      this.movePlayer(this.currentPlayerIndex, total, false);
+    }
+  }
+
+  // OPCIONES DE CÁRCEL
+  showJailOptions() {
+    const player = this.players[this.currentPlayerIndex];
+    const diceArea = document.getElementById('dice-area');
+    
+    if (!diceArea) return;
+    
+    let optionsHTML = `
+      <div class="jail-options">
+        <h5>🚔 Estás en la Cárcel</h5>
+        <p>Intento ${player.jail_turns + 1} de 3</p>
+        <div class="d-grid gap-2">
+    `;
+    
+    if (player.money >= 50) {
+      optionsHTML += `
+        <button class="btn btn-warning btn-sm" onclick="monopolyBoard.payToLeaveJail()">
+          💰 Pagar $50 y salir
+        </button>
+      `;
+    } else {
+      optionsHTML += `
+        <button class="btn btn-warning btn-sm" disabled>
+          💰 Pagar $50 (No tienes dinero)
+        </button>
+      `;
+    }
+    
+    // Opción 2: Intentar sacar pares 
+    optionsHTML += `
+      <button class="btn btn-primary btn-sm" onclick="monopolyBoard.tryRollDoublesInJail()">
+        🎲 Intentar sacar pares
+      </button>
+      `;
+  
+  optionsHTML += `
+      </div>
+      <small class="text-muted mt-2 d-block">
+        Si sacas pares, sales automáticamente. Si no, pierdes el turno.
+      </small>
+      </div>
+      `;
+    
+    diceArea.innerHTML = optionsHTML;
+  }
+
+  payToLeaveJail() {
+    const player = this.players[this.currentPlayerIndex];
+    
+    if (player.money < 50) {
+      alert('⚠ No tienes suficiente dinero para pagar.');
+      return;
+    }
+    
+    player.money -= 50;
+    player.in_jail = false;
+    player.jail_turns = 0;
+    
+    this.addToLog(`${player.nick_name} pagó $50 y salió de la cárcel`);
+    this.renderPlayersPanel();
+    this.restoreDiceButton();
+    
+    alert('✅ Saliste de la cárcel. Ahora puedes tirar los dados.');
+  }
+
+  tryRollDoublesInJail() {
+    const player = this.players[this.currentPlayerIndex];
+    
+    const dice1 = Math.floor(Math.random() * 6) + 1;
+    const dice2 = Math.floor(Math.random() * 6) + 1;
+    const total = dice1 + dice2;
+    const isDoubles = dice1 === dice2;
+    
+    const diceResult = document.getElementById('diceResult');
+    if (diceResult) {
+      diceResult.innerHTML = `
+        <div class="dice-display">
+          <span class="die">${dice1}</span>
+          <span class="die">${dice2}</span>
+          <span class="total">Total: ${total}</span>
+          ${isDoubles ? '<span class="doubles-badge">¡PARES!</span>' : ''}
+        </div>
+      `;
+    }
+    
+    this.addToLog(`${player.nick_name} sacó ${total}${isDoubles ? ' (pares)' : ''}`);
+    this.handleJailDiceRoll(dice1, dice2, total, isDoubles);
+    
+    setTimeout(() => this.restoreDiceButton(), 1000);
+  }
+
+  handleJailDiceRoll(dice1, dice2, total, isDoubles) {
+    const player = this.players[this.currentPlayerIndex];
+    
+    if (isDoubles) {
+      this.addToLog(`${player.nick_name} sacó pares y sale de la cárcel!`);
+      player.in_jail = false;
+      player.jail_turns = 0;
+      player.doubles_count = 0;
+      this.movePlayer(this.currentPlayerIndex, total, false);
+    } else {
+      player.jail_turns++;
+      
+      if (player.jail_turns >= 3) {
+        this.addToLog(`${player.nick_name} falló el tercer intento. Debe pagar $50.`);
+        
+        if (player.money >= 50) {
+          player.money -= 50;
+          player.in_jail = false;
+          player.jail_turns = 0;
+          this.addToLog(`${player.nick_name} pagó $50 y sale de la cárcel`);
+          this.movePlayer(this.currentPlayerIndex, total, false);
+        } else {
+          this.addToLog(`${player.nick_name} no tiene $50 para pagar!`);
+          alert(`⚠ ${player.nick_name} está en bancarrota y debe hipotecar propiedades o declararse en quiebra.`);
+          this.nextPlayer();
+        }
+      } else {
+        this.addToLog(`${player.nick_name} no sacó pares. Sigue en la cárcel (intento ${player.jail_turns}/3)`);
+        this.renderPlayersPanel();
+        this.nextPlayer();
+      }
+    }
+  }
+
+  restoreDiceButton() {
+    const diceArea = document.getElementById('dice-area');
+    if (!diceArea) return;
+    
+    diceArea.innerHTML = `
+      <button id="rollDiceBtn" class="btn btn-primary">🎲 Lanzar dados</button>
+      <div class="mt-2">
+        <input type="number" id="manualDiceInput" class="form-control form-control-sm" 
+               placeholder="Ingresa valor (1-12)" min="1" max="12" style="width: 165px; margin: 5px auto;">
+      </div>
+      <div id="diceResult"></div>
+    `;
+    
+    const rollBtn = document.getElementById('rollDiceBtn');
+    if (rollBtn) {
+      rollBtn.addEventListener('click', () => this.rollDice());
+    }
+  }
+
+  // ENVIAR A LA CÁRCEL
+  sendToJail(playerIndex) {
+    const player = this.players[playerIndex];
+    
+    player.position = 10;
+    player.in_jail = true;
+    player.jail_turns = 0;
+    player.doubles_count = 0;
+    
+    this.addToLog(`${player.nick_name} fue enviado a la CÁRCEL 🚔`);
+    
+    this.updatePlayerTokens();
+    this.renderPlayersPanel();
+    localStorage.setItem('monopoly_players', JSON.stringify(this.players));
+    
+    this.nextPlayer();
   }
 
   //Mover jugador
-  movePlayer(playerIndex, steps) {
+  async movePlayer(playerIndex, steps, hasExtraTurn = false) {
     const player = this.players[playerIndex];
     const oldPosition = player.position;
     player.position = (player.position + steps) % this.getTotalSquares();
@@ -363,15 +606,19 @@ class MonopolyBoard {
     this.renderPlayersPanel();
 
     // Procesar la casilla actual
-    this.processSquare(playerIndex);
+    await this.processSquare(playerIndex);
+
+    if (hasExtraTurn) {
+      this.currentPlayerIndex = playerIndex;
+      this.addToLog(`${player.nick_name} tiene un turno extra por sacar pares!`);
+      this.renderPlayersPanel();
+    }
 
     // Guardar estado
     localStorage.setItem('monopoly_players', JSON.stringify(this.players));
   }
 
-  /**
-   * Actualizar posición visual de las fichas
-   */
+  //Actualizar posición visual de las fichas
   updatePlayerTokens() {
     // Limpiar todas las áreas de tokens
     document.querySelectorAll('.tokens-area').forEach(area => area.innerHTML = '');
@@ -392,10 +639,9 @@ class MonopolyBoard {
     });
   }
 
-  /**
-   * Procesar la casilla donde cayó el jugador
-   */
-  processSquare(playerIndex) {
+  //Procesar la casilla donde cayó el jugador
+  //Esta función coordina todas las acciones y SIEMPRE cambia de turno al final
+ async  processSquare(playerIndex) {
     const player = this.players[playerIndex];
     const squareId = player.position;
     
@@ -406,15 +652,24 @@ class MonopolyBoard {
       if (square) break;
     }
 
-    if (!square) return;
+    if (!square) {this.nextPlayer()
+      return
+    };
 
     this.addToLog(`${player.nick_name} cayó en ${square.name}`);
+
+    // Verificar si cayó en "Ve a la cárcel"
+    if (square.id === 30) {
+      this.addToLog(`${player.nick_name} debe ir a la cárcel!`);
+      this.sendToJail(playerIndex);
+      return;
+    }
 
     // Procesar según el tipo de casilla
     switch (square.type) {
       case 'property':
       case 'railroad':
-        this.handlePropertySquare(playerIndex, square);
+        await this.handlePropertySquare(playerIndex, square);
         break;
       case 'tax':
         this.handleTaxSquare(playerIndex, square);
@@ -423,50 +678,66 @@ class MonopolyBoard {
         this.handleCommunityChest(playerIndex);
         break;
       case 'chance':
-        this.handleChance(playerIndex);
+        await this.handleChance(playerIndex);
         break;
+      default:
+      //Para casillas especiales sin acciones especiales, solo pasa de turno      
     }
 
     // Cambiar al siguiente jugador
     this.nextPlayer();
   }
 
-  /**
-   * Manejar casilla de propiedad
-   */
-  handlePropertySquare(playerIndex, square) {
+  //Manejar casilla de propiedad
+  async handlePropertySquare(playerIndex, square) {
     const owner = this.getPropertyOwner(square.id);
     const player = this.players[playerIndex];
 
     if (!owner) {
+      // Propiedad disponible - dar tiempo para ver la UI antes del confirm
+    this.renderPlayersPanel();
+    
+    // Esperar un momento para que el usuario vea los dados y logs
+    await new Promise(resolve => setTimeout(resolve, 300));
+
       // Propiedad disponible
-      const buy = confirm(`¿Quieres comprar ${square.name} por $${square.price}?`);
-      if (buy && player.money >= square.price) {
-        player.money -= square.price;
-        player.properties = player.properties || [];
-        player.properties.push({
-          id: square.id,
-          name: square.name,
-          houses: 0,
-          hotel: false
-        });
-        this.addToLog(`${player.nick_name} compró ${square.name}`);
-        this.render();
+     const buy = confirm(`¿Quieres comprar ${square.name} por ${square.price}?`);
+      if (buy) {
+        if (player.money >= square.price) {
+          player.money -= square.price;
+          player.properties = player.properties || [];
+          player.properties.push({
+            id: square.id,
+            name: square.name,
+            houses: 0,
+            hotel: false
+          });
+          this.addToLog(`${player.nick_name} compró ${square.name}`);
+          this.render(); // Actualizar el tablero para mostrar el nuevo dueño
+          this.initializeGameControls(); // Re-inicializar los controles después de render
+        } else {
+          this.addToLog(`${player.nick_name} no tiene suficiente dinero`);
+        }
+      } else {
+        this.addToLog(`${player.nick_name} no compró ${square.name}`);
       }
+       this.renderPlayersPanel();
+
     } else if (owner.nick_name !== player.nick_name) {
-      // Pagar renta
+      // Pagar renta al dueño
       const rent = square.rent?.base || 0;
       player.money -= rent;
       owner.money += rent;
-      this.addToLog(`${player.nick_name} pagó $${rent} de renta a ${owner.nick_name}`);
+      this.addToLog(`${player.nick_name} pagó ${rent} de renta a ${owner.nick_name}`);
+       this.renderPlayersPanel();
+    } else {
+      // Es del jugador actual - por ahora solo informar
+      this.addToLog(`${player.nick_name} cayó en su propia propiedad`);
+      this.renderPlayersPanel();
     }
-
-    this.renderPlayersPanel();
   }
 
-  /**
-   * Manejar casilla de impuestos
-   */
+  //Manejar casilla de impuesto
   handleTaxSquare(playerIndex, square) {
     const player = this.players[playerIndex];
     player.money += square.action.money;
@@ -474,31 +745,34 @@ class MonopolyBoard {
     this.renderPlayersPanel();
   }
 
-  /**
-   * Manejar Caja de Comunidad
-   */
+  //Manejar Caja de Comunidad
   async handleCommunityChest(playerIndex) {
     const card = await MonopolyAPI.getCommunityChestCard();
     const player = this.players[playerIndex];
-    player.money += card.action.money;
     this.addToLog(`Caja de Comunidad: ${card.description}`);
+
+    // Solo procesar dinero (elbackend solo maneja este caso para la carcel)
+  if (card.action && card.action.money) {
+    player.money += card.action.money;
+  }
+
     this.renderPlayersPanel();
   }
 
-  /**
-   * Manejar Sorpresa
-   */
+  //Manejar Sorpresa
   async handleChance(playerIndex) {
     const card = await MonopolyAPI.getChanceCard();
     const player = this.players[playerIndex];
-    player.money += card.action.money;
     this.addToLog(`Sorpresa: ${card.description}`);
+
+    if (card.action && card.action.money) {
+    player.money += card.action.money;
+  }
+
     this.renderPlayersPanel();
   }
 
-  /**
-   * Obtener dueño de una propiedad
-   */
+  //Obtener dueño de una propiedad
   getPropertyOwner(squareId) {
     for (const player of this.players) {
       if (player.properties?.some(prop => prop.id === squareId)) {
@@ -508,17 +782,16 @@ class MonopolyBoard {
     return null;
   }
 
-  /**
-   * Cambiar al siguiente jugador
-   */
+  //Cambiar al siguiente jugador
   nextPlayer() {
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     this.renderPlayersPanel();
+
+    // Guardar estado después de cambiar de jugador
+    localStorage.setItem('monopoly_players', JSON.stringify(this.players));
   }
 
-  /**
-   * Agregar mensaje al log
-   */
+  //Agregar mensaje al log
   addToLog(message) {
     const log = document.getElementById('game-log');
     if (log) {
@@ -527,16 +800,14 @@ class MonopolyBoard {
       entry.textContent = `• ${message}`;
       log.insertBefore(entry, log.firstChild);
       
-      // Mantener solo los últimos 5 mensajes
-      while (log.children.length > 5) {
+      // Mantener solo los últimos 3 mensajes
+      while (log.children.length > 3) {
         log.removeChild(log.lastChild);
       }
     }
   }
 
-  /**
-   * Obtener color hexadecimal de una propiedad
-   */
+  //Obtener color de una propiedad
   getColorHex(color) {
     const colors = {
       brown: '#8B4513',

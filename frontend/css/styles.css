@@ -45,3 +45,13 @@ body {
 .required {
   color: #dc3545;
 }
+
+/* Colores de ficha */
+.color-red    { background-color: #d9534f; }
+.color-blue   { background-color: #0d6efd; }
+.color-green  { background-color: #198754; }
+.color-yellow { background-color: #ffc107; }
+.color-purple { background-color: #6f42c1; }
+.color-orange { background-color: #fd7e14; }
+.color-black  { background-color: #212529; }
+.color-pink   { background-color: #e83e8c; }
