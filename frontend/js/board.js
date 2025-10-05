@@ -5,6 +5,46 @@ class MonopolyBoard {
     this.currentPlayerIndex = 0;
   }
 
+// Mostrar modal personalizado
+showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('gameModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+    const modalHeader = document.getElementById('modalHeader');
+
+    // Configurar contenido
+    modalTitle.textContent = title;
+    modalBody.innerHTML = body;
+    modalHeader.className = `modal-header ${headerClass}`;
+    
+    // OCULTAR el botón de cerrar (X)
+    const closeBtn = modalHeader.querySelector('.btn-close');
+    closeBtn.style.display = 'none';
+
+    // Limpiar y agregar botones
+    modalFooter.innerHTML = '';
+    buttons.forEach(btn => {
+      const button = document.createElement('button');
+      button.className = btn.class;
+      button.textContent = btn.text;
+      button.onclick = () => {
+        bootstrap.Modal.getInstance(modal).hide();
+        resolve(btn.value);
+      };
+      modalFooter.appendChild(button);
+    });
+
+    // Mostrar modal con opciones que impiden cerrarlo con ESC o click fuera
+    const bsModal = new bootstrap.Modal(modal, {
+      backdrop: 'static',  // No se cierra al hacer click fuera
+      keyboard: false      // No se cierra con la tecla ESC
+    });
+    bsModal.show();
+  });
+}
+
   //Inicializar el tablero con datos del backend y jugadores
   async initialize() {
     try {
@@ -113,6 +153,23 @@ class MonopolyBoard {
 
     // Renderizar panel de información de jugadores
     this.renderPlayersPanel();
+
+    // Aplicar colores de propietarios a las propiedades
+    this.players.forEach(player => {
+      if (player.properties) {
+        player.properties.forEach(prop => {
+          const square = document.querySelector(`[data-square-id="${prop.id}"]`);
+          if (square) {
+            const status = square.querySelector('.square-status.property-owned');
+            if (status) {
+              status.style.setProperty('--player-color', player.color_hex);
+            }
+          }
+        });
+      }
+    });
+    // Asegurar que las fichas se muestren después de renderizar
+    this.updatePlayerTokens();
   }
 
   //Renderizar un lado del tablero
@@ -139,9 +196,9 @@ class MonopolyBoard {
     // 1. Obtiene la posición donde debe ir el cuadrado
     const position = this.getGridPosition(square.id);
     // 2. Coloca el elemento en una columna específica
-    squareDiv.style.gridColumn = position.column;
+    squareDiv.classList.add(`grid-col-${position.column}`);
     // 3. Coloca el elemento en una fila específica
-    squareDiv.style.gridRow = position.row;
+    squareDiv.classList.add(`grid-row-${position.row}`);
 
 
     // Agregar contenido según el tipo de casilla
@@ -183,10 +240,10 @@ class MonopolyBoard {
     const statusText = owner ? `Jugador: ${owner.nick_name}` : 'Disponible';
 
     return `
-      <div class="square-color-bar" style="background-color: ${this.getColorHex(square.color)}"></div>
-      <div class="square-status" style="background-color: ${status}; color: ${owner ? '#fff' : '#666'}">
-        ${statusText}
-      </div>
+    <div class="square-color-bar square-color-${square.color}"></div>
+    <div class="square-status ${owner ? 'property-owned' : 'property-available'}" data-owner="${owner ? owner.nick_name : ''}">
+    ${statusText}
+    </div>
       <div class="square-content">
         <div class="square-name">${square.name}</div>
         <div class="square-price">$${square.price}</div>
@@ -223,9 +280,9 @@ class MonopolyBoard {
     const statusText = owner ? `Jugador: ${owner.nick_name}` : 'Disponible';
 
     return `
-      <div class="square-status" style="background-color: ${status}; color: ${owner ? '#fff' : '#666'}">
-        ${statusText}
-      </div>
+    <div class="square-status ${owner ? 'property-owned' : 'property-available'}" data-owner="${owner ? owner.nick_name : ''}">
+    ${statusText}
+    </div>
       <div class="square-content">
         <div class="square-icon-small">🚂</div>
         <div class="square-name">${square.name}</div>
@@ -292,10 +349,10 @@ class MonopolyBoard {
       <div id="game-log" class="game-log"></div>
       <div id="dice-area" class="dice-area">
         <button id="rollDiceBtn" class="btn btn-primary">🎲 Lanzar dados</button>
-        <div class="mt-2">
-          <input type="number" id="manualDiceInput" class="form-control form-control-sm" 
-                 placeholder="Ingresa valor (1-12)" min="1" max="12" style="width: 165px; margin: 5px auto;">
-        </div>
+      <div class="mt-2">
+        <input type="number" id="manualDiceInput" class="form-control form-control-sm dice-manual-input"
+        placeholder="Ingresa valor (1-12)" min="1" max="12">
+      </div>
         <div id="diceResult"></div>
       </div>
     `;
@@ -333,8 +390,9 @@ class MonopolyBoard {
 
     
       playerDiv.innerHTML = `
-        <div class="player-token" style="background-color: ${player.color_hex}"></div>
-        <div class="player-details">
+      <div class="player-token player-color-${index}"></div>
+      <div class="player-details">
+
           <strong>
           ${player.nick_name}
           ${flagUrl ? `<img class="player-flag" src="${flagUrl}" alt="${code}">` : ''}
@@ -344,11 +402,55 @@ class MonopolyBoard {
           <div>Dinero: $${player.money}</div>
          <div>Propiedades: ${props.length}</div>
         ${propsList}
+        ${isCurrentPlayer ? this.renderBuildButtons(player, index) : ''}
         </div>
       `;
+      
       panel.appendChild(playerDiv);
+
+      // Aplicar color del jugador al token
+      const tokenInPanel = playerDiv.querySelector('.player-token');
+      if (tokenInPanel) {
+        tokenInPanel.style.setProperty('--player-color', player.color_hex);
+      }
     });
   }
+
+
+renderBuildButtons(player, playerIndex) {
+  const buildableProps = (player.properties || []).filter(prop => {
+    // Buscar info de la propiedad en el tablero
+    let square = null;
+    for (const side of ['bottom', 'left', 'top', 'right']) {
+      square = this.boardData[side]?.find(s => s.id === prop.id);
+      if (square) break;
+    }
+    
+    // Solo propiedades con color y que tengan monopolio
+    return square && square.type === 'property' && square.color && 
+           this.hasColorMonopoly(playerIndex, square.color) &&
+           (!prop.hotel); // No mostrar si ya tiene hotel
+  });
+  
+  if (buildableProps.length === 0) return '';
+  
+  let html = '<div class="mt-2"><small class="text-muted">Construir:</small>';
+  buildableProps.forEach(prop => {
+    const icon = prop.houses === 4 ? '🏨' : '🏠';
+    const text = prop.houses === 4 ? 'Hotel' : 'Casa';
+    html += `
+      <button class="btn btn-sm btn-outline-success w-100 mt-1" 
+              onclick="monopolyBoard.buildHouse(${playerIndex}, ${prop.id})">
+        ${icon} ${text} en ${prop.name}
+      </button>
+    `;
+  });
+  html += '</div>';
+  
+  return html;
+}
+
+
 
   // Inicializar controles del juego
   initializeGameControls() {
@@ -429,128 +531,257 @@ class MonopolyBoard {
 
   // OPCIONES DE CÁRCEL
   showJailOptions() {
-    const player = this.players[this.currentPlayerIndex];
-    const diceArea = document.getElementById('dice-area');
+  const player = this.players[this.currentPlayerIndex];
+  const diceArea = document.getElementById('dice-area');
+  
+  if (!diceArea) return;
+  
+  let optionsHTML = `
+    <button id="rollDiceBtn" class="btn btn-primary" disabled style="opacity: 0.5;">🎲 Lanzar dados</button>
+    <div class="mt-2">
+      <input type="number" id="manualDiceInput" class="form-control form-control-sm dice-manual-input" 
+             placeholder="Ingresa valor (1-12)" min="1" max="12">
+    </div>
+    <div id="diceResult"></div>
     
-    if (!diceArea) return;
-    
-    let optionsHTML = `
-      <div class="jail-options">
-        <h5>🚔 Estás en la Cárcel</h5>
-        <p>Intento ${player.jail_turns + 1} de 3</p>
-        <div class="d-grid gap-2">
-    `;
-    
-    if (player.money >= 50) {
-      optionsHTML += `
-        <button class="btn btn-warning btn-sm" onclick="monopolyBoard.payToLeaveJail()">
-          💰 Pagar $50 y salir
-        </button>
-      `;
-    } else {
-      optionsHTML += `
-        <button class="btn btn-warning btn-sm" disabled>
-          💰 Pagar $50 (No tienes dinero)
-        </button>
-      `;
-    }
-    
-    // Opción 2: Intentar sacar pares 
+    <div class="jail-options mt-3">
+      <h5>🚔 Estás en la Cárcel</h5>
+      <p>Intento ${player.jail_turns + 1} de 3</p>
+      <div class="d-grid gap-2">
+  `;
+  
+  if (player.money >= 50) {
     optionsHTML += `
+      <button class="btn btn-warning btn-sm" onclick="monopolyBoard.payToLeaveJail()">
+        💰 Pagar $50 y salir
+      </button>
+    `;
+  } else {
+    optionsHTML += `
+      <button class="btn btn-warning btn-sm" disabled>
+        💰 Pagar $50 (No tienes dinero)
+      </button>
+    `;
+  }
+  
+  optionsHTML += `
       <button class="btn btn-primary btn-sm" onclick="monopolyBoard.tryRollDoublesInJail()">
         🎲 Intentar sacar pares
       </button>
-      `;
+    </div>
+    <small class="text-muted mt-2 d-block">
+      Si sacas pares, sales automáticamente. Si no, pierdes el turno.
+    </small>
+    </div>
+  `;
   
-  optionsHTML += `
-      </div>
-      <small class="text-muted mt-2 d-block">
-        Si sacas pares, sales automáticamente. Si no, pierdes el turno.
-      </small>
-      </div>
-      `;
-    
-    diceArea.innerHTML = optionsHTML;
-  }
+  diceArea.innerHTML = optionsHTML;
+}
 
-  payToLeaveJail() {
-    const player = this.players[this.currentPlayerIndex];
+async payToLeaveJail() {
+  const player = this.players[this.currentPlayerIndex];
+  
+  if (player.money < 50) {
+    const body = `
+      <div class="mb-3">
+        <div class="display-1">❌</div>
+      </div>
+      <p class="text-danger">No tienes suficiente dinero para pagar.</p>
+      <p>Necesitas: <strong>$50</strong></p>
+      <p>Tienes: <strong>$${player.money}</strong></p>
+    `;
     
-    if (player.money < 50) {
-      alert('⚠ No tienes suficiente dinero para pagar.');
+    await this.showModal('Dinero insuficiente', body, [
+      { text: 'Entendido', class: 'btn btn-danger', value: true }
+    ], 'bg-danger text-white');
+    return;
+  }
+  
+  player.money -= 50;
+  player.in_jail = false;
+  player.jail_turns = 0;
+  
+  this.addToLog(`${player.nick_name} pagó $50 y salió de la cárcel`);
+  this.renderPlayersPanel();
+  this.restoreDiceButton();
+  
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">✅</div>
+    </div>
+    <p class="fs-5">Pagaste $50 y saliste de la cárcel.</p>
+    <p class="mt-3">Ahora puedes tirar los dados.</p>
+    <p class="small mt-2">Dinero restante: <strong>$${player.money}</strong></p>
+  `;
+  
+  await this.showModal('¡Libre!', body, [
+    { text: '🎲 Listo', class: 'btn btn-success', value: true }
+  ], 'bg-success text-white');
+}
+
+ async tryRollDoublesInJail() {
+  const player = this.players[this.currentPlayerIndex];
+  
+  let dice1, dice2, total;
+  const manualInput = document.getElementById('manualDiceInput');
+  
+  // Verificar si hay un valor manual ingresado
+  if (manualInput && manualInput.value) {
+    total = parseInt(manualInput.value);
+    
+    // Validar que esté en el rango correcto
+    if (total < 1 || total > 12) {
+      alert('⚠ El valor debe estar entre 1 y 12');
       return;
     }
     
-    player.money -= 50;
-    player.in_jail = false;
-    player.jail_turns = 0;
+    // Simular dos dados que sumen el total (para visualización)
+    dice1 = Math.floor(total / 2);
+    dice2 = total - dice1;
     
-    this.addToLog(`${player.nick_name} pagó $50 y salió de la cárcel`);
-    this.renderPlayersPanel();
-    this.restoreDiceButton();
-    
-    alert('✅ Saliste de la cárcel. Ahora puedes tirar los dados.');
+    // Limpiar el input después de usar
+    manualInput.value = '';
+  } else {
+    // Lanzamiento aleatorio normal
+    dice1 = Math.floor(Math.random() * 6) + 1;
+    dice2 = Math.floor(Math.random() * 6) + 1;
+    total = dice1 + dice2;
   }
-
-  tryRollDoublesInJail() {
-    const player = this.players[this.currentPlayerIndex];
-    
-    const dice1 = Math.floor(Math.random() * 6) + 1;
-    const dice2 = Math.floor(Math.random() * 6) + 1;
-    const total = dice1 + dice2;
-    const isDoubles = dice1 === dice2;
-    
-    const diceResult = document.getElementById('diceResult');
-    if (diceResult) {
-      diceResult.innerHTML = `
-        <div class="dice-display">
-          <span class="die">${dice1}</span>
-          <span class="die">${dice2}</span>
-          <span class="total">Total: ${total}</span>
-          ${isDoubles ? '<span class="doubles-badge">¡PARES!</span>' : ''}
-        </div>
-      `;
-    }
-    
-    this.addToLog(`${player.nick_name} sacó ${total}${isDoubles ? ' (pares)' : ''}`);
-    this.handleJailDiceRoll(dice1, dice2, total, isDoubles);
-    
-    setTimeout(() => this.restoreDiceButton(), 1000);
+  
+  const isDoubles = dice1 === dice2;
+  
+  const diceResult = document.getElementById('diceResult');
+  if (diceResult) {
+    diceResult.innerHTML = `
+      <div class="dice-display">
+        <span class="die">${dice1}</span>
+        <span class="die">${dice2}</span>
+        <span class="total">Total: ${total}</span>
+        ${isDoubles ? '<span class="doubles-badge">¡PARES!</span>' : ''}
+      </div>
+    `;
   }
+  
+  this.addToLog(`${player.nick_name} sacó ${total}${isDoubles ? ' (pares)' : ''}`);
+  
+  // Esperar para que vea los dados
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  await this.handleJailDiceRoll(dice1, dice2, total, isDoubles);
+}
 
-  handleJailDiceRoll(dice1, dice2, total, isDoubles) {
-    const player = this.players[this.currentPlayerIndex];
+  async handleJailDiceRoll(dice1, dice2, total, isDoubles) {
+  const player = this.players[this.currentPlayerIndex];
+  
+  if (isDoubles) {
+  this.addToLog(`${player.nick_name} sacó pares y sale de la cárcel!`);
+  player.in_jail = false;
+  player.jail_turns = 0;
+  player.doubles_count = 0;
+  
+  // Mostrar modal de éxito
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">🎉</div>
+    </div>
+    <p class="fs-5 text-success"><strong>¡Sacaste pares y sales de la cárcel!</strong></p>
+    <p class="mt-3">Avanzarás <strong>${total} casillas (el total que sacaste en los pares)</strong>.</p>
+  `;
+  
+  await this.showModal('¡Libre!', body, [
+    { text: 'Aceptar', class: 'btn btn-success', value: true }
+  ], 'bg-success text-white');
+  
+  this.restoreDiceButton();
+  await this.movePlayer(this.currentPlayerIndex, total, false);
+} else {
+    player.jail_turns++;
     
-    if (isDoubles) {
-      this.addToLog(`${player.nick_name} sacó pares y sale de la cárcel!`);
-      player.in_jail = false;
-      player.jail_turns = 0;
-      player.doubles_count = 0;
-      this.movePlayer(this.currentPlayerIndex, total, false);
-    } else {
-      player.jail_turns++;
+    if (player.jail_turns >= 3) {
+      this.addToLog(`${player.nick_name} falló el tercer intento. Debe pagar $50.`);
       
-      if (player.jail_turns >= 3) {
-        this.addToLog(`${player.nick_name} falló el tercer intento. Debe pagar $50.`);
-        
-        if (player.money >= 50) {
-          player.money -= 50;
-          player.in_jail = false;
-          player.jail_turns = 0;
-          this.addToLog(`${player.nick_name} pagó $50 y sale de la cárcel`);
-          this.movePlayer(this.currentPlayerIndex, total, false);
-        } else {
-          this.addToLog(`${player.nick_name} no tiene $50 para pagar!`);
-          alert(`⚠ ${player.nick_name} está en bancarrota y debe hipotecar propiedades o declararse en quiebra.`);
-          this.nextPlayer();
-        }
-      } else {
-        this.addToLog(`${player.nick_name} no sacó pares. Sigue en la cárcel (intento ${player.jail_turns}/3)`);
+      if (player.money >= 50) {
+        // Mostrar modal de pago obligatorio
+        const body = `
+          <div class="mb-3">
+            <div class="display-1">🚓</div>
+          </div>
+          <p class="fs-5">Tercer intento fallido</p>
+          <p class="text-danger">Debes pagar <strong>$50</strong> para salir de la cárcel.</p>
+          <div class="mt-3">
+            <span class="fs-3 text-danger">-$50</span>
+          </div>
+          <p class="small mt-3">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money - 50}</strong></p>
+          <p class="small text-muted mt-2">Después podrás moverte ${total} casillas.</p>
+        `;
+
+        await this.showModal('¡Debes pagar!', body, [
+          { text: '💳 Pagar y salir', class: 'btn btn-warning', value: true }
+        ], 'bg-warning text-dark');
+
+        player.money -= 50;
+        player.in_jail = false;
+        player.jail_turns = 0;
+        this.addToLog(`${player.nick_name} pagó $50 y sale de la cárcel`);
         this.renderPlayersPanel();
+        this.updatePlayerTokens();
+        
+        // Mostrar que ahora puede moverse
+        const bodyMove = `
+          <div class="mb-3">
+            <div class="display-1">✅</div>
+          </div>
+          <p class="fs-5">¡Libre!</p>
+          <p>Ahora te moverás <strong>${total} casillas</strong>.</p>
+        `;
+        
+        await this.showModal('Saliste de la cárcel', bodyMove, [
+          { text: '🎲 Continuar', class: 'btn btn-success', value: true }
+        ], 'bg-success text-white');
+        
+        this.movePlayer(this.currentPlayerIndex, total, false);
+      } else {
+        this.addToLog(`${player.nick_name} no tiene $50 para pagar!`);
+        
+        const body = `
+          <div class="mb-3">
+            <div class="display-1">💸</div>
+          </div>
+          <p class="fs-5 text-danger">¡Sin fondos!</p>
+          <p>No tienes suficiente dinero para pagar $50.</p>
+          <p class="small">Debes hipotecar propiedades o declararte en quiebra.</p>
+        `;
+        
+        await this.showModal('Bancarrota', body, [
+          { text: 'Entendido', class: 'btn btn-danger', value: true }
+        ], 'bg-danger text-white');
+        
         this.nextPlayer();
       }
-    }
+    } else {
+  this.addToLog(`${player.nick_name} no sacó pares. Sigue en la cárcel (intento ${player.jail_turns}/3)`);
+  this.renderPlayersPanel();
+  this.updatePlayerTokens();
+  
+  // Mostrar modal informativo
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">🚔</div>
+    </div>
+    <p class="fs-5 text-danger">No sacaste pares</p>
+    <p>Sigues en la cárcel.</p>
+    <p class="small mt-2">Intento <strong>${player.jail_turns}/3</strong></p>
+  `;
+  
+  await this.showModal('En la cárcel', body, [
+    { text: 'Aceptar', class: 'btn btn-primary', value: true }
+  ], 'bg-danger text-white');
+  
+  this.restoreDiceButton();
+  this.nextPlayer();
+}
   }
+}
 
   restoreDiceButton() {
     const diceArea = document.getElementById('dice-area');
@@ -559,8 +790,8 @@ class MonopolyBoard {
     diceArea.innerHTML = `
       <button id="rollDiceBtn" class="btn btn-primary">🎲 Lanzar dados</button>
       <div class="mt-2">
-        <input type="number" id="manualDiceInput" class="form-control form-control-sm" 
-               placeholder="Ingresa valor (1-12)" min="1" max="12" style="width: 165px; margin: 5px auto;">
+      <input type="number" id="manualDiceInput" class="form-control form-control-sm dice-manual-input" 
+      placeholder="Ingresa valor (1-12)" min="1" max="12">
       </div>
       <div id="diceResult"></div>
     `;
@@ -582,6 +813,19 @@ class MonopolyBoard {
     
     this.addToLog(`${player.nick_name} fue enviado a la CÁRCEL 🚔`);
     
+    // Mostrar modal
+    const body = `
+    <div class="mb-3">
+    <div class="display-1">🚓</div>
+    </div>
+    <p class="fs-5 text-danger"><strong>¡Has sido enviado a la cárcel!</strong></p>
+    <p>Deberás intentar salir en tu próximo turno.</p>
+    `;
+
+this.showModal('¡A la cárcel!', body, [
+  { text: 'Entendido', class: 'btn btn-danger', value: true }
+], 'bg-danger text-white');
+
     this.updatePlayerTokens();
     this.renderPlayersPanel();
     localStorage.setItem('monopoly_players', JSON.stringify(this.players));
@@ -631,7 +875,7 @@ class MonopolyBoard {
         if (tokensArea) {
           const token = document.createElement('div');
           token.className = 'player-token';
-          token.style.backgroundColor = player.color_hex;
+          token.style.setProperty('--player-color', player.color_hex);
           token.title = player.nick_name;
           tokensArea.appendChild(token);
         }
@@ -690,87 +934,238 @@ class MonopolyBoard {
 
   //Manejar casilla de propiedad
   async handlePropertySquare(playerIndex, square) {
-    const owner = this.getPropertyOwner(square.id);
-    const player = this.players[playerIndex];
+  const owner = this.getPropertyOwner(square.id);
+  const player = this.players[playerIndex];
 
-    if (!owner) {
-      // Propiedad disponible - dar tiempo para ver la UI antes del confirm
+  if (!owner) {
+    // Propiedad disponible
     this.renderPlayersPanel();
-    
-    // Esperar un momento para que el usuario vea los dados y logs
     await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Propiedad disponible
-     const buy = confirm(`¿Quieres comprar ${square.name} por ${square.price}?`);
-      if (buy) {
-        if (player.money >= square.price) {
-          player.money -= square.price;
-          player.properties = player.properties || [];
-          player.properties.push({
-            id: square.id,
-            name: square.name,
-            houses: 0,
-            hotel: false
-          });
-          this.addToLog(`${player.nick_name} compró ${square.name}`);
-          this.render(); // Actualizar el tablero para mostrar el nuevo dueño
-          this.initializeGameControls(); // Re-inicializar los controles después de render
-        } else {
-          this.addToLog(`${player.nick_name} no tiene suficiente dinero`);
-        }
-      } else {
-        this.addToLog(`${player.nick_name} no compró ${square.name}`);
-      }
-       this.renderPlayersPanel();
+    const colorClass = square.type === 'railroad' ? 'bg-dark text-white' : `bg-success text-white`;
+    const propertyIcon = square.type === 'railroad' ? '🚂' : '🏠';
+    
+    const body = `
+      <div class="mb-3">
+        <div class="display-1">${propertyIcon}</div>
+      </div>
+      <p class="mb-2"><strong>Precio:</strong> <span class="fs-4 text-success">$${square.price}</span></p>
+      <p class="text-muted">¿Deseas comprar esta propiedad?</p>
+      <p class="small">Tu dinero actual: <strong>$${player.money}</strong></p>
+    `;
 
-    } else if (owner.nick_name !== player.nick_name) {
-      // Pagar renta al dueño
-      const rent = square.rent?.base || 0;
-      player.money -= rent;
-      owner.money += rent;
-      this.addToLog(`${player.nick_name} pagó ${rent} de renta a ${owner.nick_name}`);
-       this.renderPlayersPanel();
+    const buttons = [
+      { text: 'No comprar', class: 'btn btn-outline-secondary', value: false },
+      { text: '💰 Comprar', class: 'btn btn-success', value: true }
+    ];
+
+    const buy = await this.showModal(square.name, body, buttons, colorClass);
+
+    if (buy) {
+      if (player.money >= square.price) {
+        player.money -= square.price;
+        player.properties = player.properties || [];
+        player.properties.push({
+          id: square.id,
+          name: square.name,
+          houses: 0,
+          hotel: false
+        });
+        this.addToLog(`${player.nick_name} compró ${square.name}`);
+        this.render();
+        this.initializeGameControls();
+        this.updatePlayerTokens();
+      } else {
+        this.addToLog(`${player.nick_name} no tiene suficiente dinero`);
+        
+        const body = `
+          <div class="mb-3">
+            <div class="display-1">❌</div>
+          </div>
+          <p class="text-danger">No tienes suficiente dinero para comprar esta propiedad.</p>
+          <p>Necesitas: <strong>$${square.price}</strong></p>
+          <p>Tienes: <strong>$${player.money}</strong></p>
+        `;
+        
+        await this.showModal('Dinero insuficiente', body, [
+          { text: 'Entendido', class: 'btn btn-primary', value: true }
+        ], 'bg-danger text-white');
+      }
     } else {
-      // Es del jugador actual - por ahora solo informar
-      this.addToLog(`${player.nick_name} cayó en su propia propiedad`);
-      this.renderPlayersPanel();
+      this.addToLog(`${player.nick_name} no compró ${square.name}`);
+    }
+    this.renderPlayersPanel();
+
+  } else if (owner.nick_name !== player.nick_name) {
+    // Calcular renta
+    let rent = 0;
+    
+    if (square.type === 'railroad') {
+      const railroadCount = (owner.properties || []).filter(prop => {
+        for (const side of ['bottom', 'left', 'top', 'right']) {
+          const sq = this.boardData[side]?.find(s => s.id === prop.id);
+          if (sq && sq.type === 'railroad') return true;
+        }
+        return false;
+      }).length;
+      
+      rent = square.rent[railroadCount] || 0;
+    } else {
+       // Buscar la propiedad en el owner para ver casas/hotel
+  const ownerProperty = owner.properties.find(p => p.id === square.id);
+  
+  if (ownerProperty.hotel) {
+    rent = square.rent?.withHotel || 0;
+  } else if (ownerProperty.houses > 0) {
+    rent = square.rent?.withHouse?.[ownerProperty.houses - 1] || square.rent?.base || 0;
+  } else {
+    rent = square.rent?.base || 0;
     }
   }
-
-  //Manejar casilla de impuesto
-  handleTaxSquare(playerIndex, square) {
-    const player = this.players[playerIndex];
-    player.money += square.action.money;
-    this.addToLog(`${player.nick_name} ${square.action.money < 0 ? 'pagó' : 'recibió'} $${Math.abs(square.action.money)}`);
+    
+    player.money -= rent;
+    owner.money += rent;
+    this.addToLog(`${player.nick_name} pagó $${rent} de renta a ${owner.nick_name}`);
+    
+    // Mostrar modal de pago de renta
+    const body = `
+      <div class="mb-3">
+        <div class="display-1">💸</div>
+      </div>
+      <p><strong>Propietario:</strong> <span style="color: ${owner.color_hex}">${owner.nick_name}</span></p>
+      <p><strong>Renta a pagar:</strong> <span class="fs-4 text-danger">$${rent}</span></p>
+      <p class="small text-muted">Debes pagar la renta al dueño.</p>
+      <p class="small">Tu dinero restante: <strong>$${player.money}</strong></p>
+    `;
+    
+    await this.showModal(square.name, body, [
+      { text: '💳 Pagar', class: 'btn btn-warning', value: true }
+    ], 'bg-warning text-dark');
+    
+    this.renderPlayersPanel();
+  } else {
+    this.addToLog(`${player.nick_name} cayó en su propia propiedad`);
     this.renderPlayersPanel();
   }
+}
+
+  //Manejar casilla de impuesto
+  async handleTaxSquare(playerIndex, square) {
+  const player = this.players[playerIndex];
+  const money = square.action.money;
+  const isPaying = money < 0;
+  
+  this.addToLog(`${player.nick_name} ${isPaying ? 'pagó' : 'recibió'} $${Math.abs(money)}`);
+  
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">💰</div>
+    </div>
+    <p class="fs-5">${square.name}</p>
+    <div class="mt-3">
+      <p class="mb-2">${isPaying ? 'Debes pagar:' : 'Recibes:'}</p>
+      <span class="fs-3 ${isPaying ? 'text-danger' : 'text-success'}">
+        ${isPaying ? '-' : '+'}$${Math.abs(money)}
+      </span>
+    </div>
+    <p class="small mt-3">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money + money}</strong></p>
+  `;
+
+  const buttons = [
+    { 
+      text: isPaying ? '💳 Pagar' : '✅ Aceptar', 
+      class: isPaying ? 'btn btn-danger' : 'btn btn-success', 
+      value: true 
+    }
+  ];
+
+  await this.showModal(square.name, body, buttons, isPaying ? 'bg-danger text-white' : 'bg-success text-white');
+
+  // Procesar el pago después de mostrar el modal
+  player.money += money;
+  
+  this.renderPlayersPanel();
+}
 
   //Manejar Caja de Comunidad
   async handleCommunityChest(playerIndex) {
-    const card = await MonopolyAPI.getCommunityChestCard();
-    const player = this.players[playerIndex];
-    this.addToLog(`Caja de Comunidad: ${card.description}`);
+  const card = await MonopolyAPI.getCommunityChestCard();
+  const player = this.players[playerIndex];
+  this.addToLog(`Caja de Comunidad: ${card.description}`);
 
-    // Solo procesar dinero (elbackend solo maneja este caso para la carcel)
-  if (card.action && card.action.money) {
-    player.money += card.action.money;
+  const money = card.action?.money || 0;
+  const isPositive = money > 0;
+  
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">📦</div>
+    </div>
+    <p class="fs-5">${card.description}</p>
+    <div class="mt-3">
+      <span class="fs-3 ${isPositive ? 'text-success' : 'text-danger'}">
+        ${isPositive ? '+' : ''}$${money}
+      </span>
+    </div>
+    <p class="small mt-2">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money + money}</strong></p>
+  `;
+
+  const buttons = [
+    { 
+      text: isPositive ? '✅ Aceptar' : '💳 Pagar', 
+      class: isPositive ? 'btn btn-success' : 'btn btn-warning', 
+      value: true 
+    }
+  ];
+
+  await this.showModal('Caja de Comunidad', body, buttons, 'bg-info text-white');
+
+  // Procesar dinero después de mostrar el modal
+  if (money) {
+    player.money += money;
   }
 
-    this.renderPlayersPanel();
-  }
+  this.renderPlayersPanel();
+}
 
   //Manejar Sorpresa
   async handleChance(playerIndex) {
-    const card = await MonopolyAPI.getChanceCard();
-    const player = this.players[playerIndex];
-    this.addToLog(`Sorpresa: ${card.description}`);
+  const card = await MonopolyAPI.getChanceCard();
+  const player = this.players[playerIndex];
+  this.addToLog(`Sorpresa: ${card.description}`);
 
-    if (card.action && card.action.money) {
-    player.money += card.action.money;
+  const money = card.action?.money || 0;
+  const isPositive = money > 0;
+  
+  const body = `
+    <div class="mb-3">
+      <div class="display-1">❓</div>
+    </div>
+    <p class="fs-5">${card.description}</p>
+    <div class="mt-3">
+      <span class="fs-3 ${isPositive ? 'text-success' : 'text-danger'}">
+        ${isPositive ? '+' : ''}$${money}
+      </span>
+    </div>
+    <p class="small mt-2">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money + money}</strong></p>
+  `;
+
+  const buttons = [
+    { 
+      text: isPositive ? '✅ Aceptar' : '💳 Pagar', 
+      class: isPositive ? 'btn btn-success' : 'btn btn-warning', 
+      value: true 
+    }
+  ];
+
+  await this.showModal('Sorpresa', body, buttons, 'bg-warning text-dark');
+
+  // Procesar dinero después de mostrar el modal
+  if (money) {
+    player.money += money;
   }
 
-    this.renderPlayersPanel();
-  }
+  this.renderPlayersPanel();
+}
 
   //Obtener dueño de una propiedad
   getPropertyOwner(squareId) {
@@ -782,10 +1177,101 @@ class MonopolyBoard {
     return null;
   }
 
+  //para casas, revisa si el jugador posee todas las propiedades del mismo color
+  hasColorMonopoly(playerIndex, color) {
+  const player = this.players[playerIndex];
+  
+  // Obtener todas las propiedades de ese color del tablero
+  const colorProperties = [];
+  for (const side of ['bottom', 'left', 'top', 'right']) {
+    this.boardData[side].forEach(square => {
+      if (square.type === 'property' && square.color === color) {
+        colorProperties.push(square.id);
+      }
+    });
+  }
+  
+  // Verificar si el jugador posee todas
+  const playerPropertyIds = (player.properties || []).map(p => p.id);
+  return colorProperties.every(id => playerPropertyIds.includes(id));
+}
+
+//para construir casas/hoteles:
+async buildHouse(playerIndex, propertyId) {
+  const player = this.players[playerIndex];
+  const property = player.properties.find(p => p.id === propertyId);
+  
+  if (!property) return;
+  
+  // Verificar si ya tiene hotel
+  if (property.hotel) {
+    alert('⚠️ Esta propiedad ya tiene un hotel');
+    return;
+  }
+  
+  // Si tiene 4 casas, ofrecer hotel
+  if (property.houses === 4) {
+    if (player.money < 250) {
+      alert('⚠️ No tienes suficiente dinero para el hotel ($250)');
+      return;
+    }
+    
+    const buyHotel = await this.showModal(
+      '🏨 Comprar Hotel',
+      `<p>Tienes 4 casas en ${property.name}</p>
+       <p>Precio del hotel: <strong>$250</strong></p>
+       <p>Tu dinero: <strong>$${player.money}</strong></p>`,
+      [
+        { text: 'Cancelar', class: 'btn btn-secondary', value: false },
+        { text: '🏨 Comprar Hotel', class: 'btn btn-success', value: true }
+      ],
+      'bg-success text-white'
+    );
+    
+    if (buyHotel) {
+      player.money -= 250;
+      property.houses = 0;
+      property.hotel = true;
+      this.addToLog(`${player.nick_name} construyó un hotel en ${property.name}`);
+      this.render();
+      this.initializeGameControls();
+    }
+    return;
+  }
+  
+  // Comprar casa
+  if (player.money < 100) {
+    alert('⚠️ No tienes suficiente dinero para una casa ($100)');
+    return;
+  }
+  
+  const buyHouse = await this.showModal(
+    '🏠 Comprar Casa',
+    `<p>Propiedad: ${property.name}</p>
+     <p>Casas actuales: <strong>${property.houses}</strong></p>
+     <p>Precio de la casa: <strong>$100</strong></p>
+     <p>Tu dinero: <strong>$${player.money}</strong></p>`,
+    [
+      { text: 'Cancelar', class: 'btn btn-secondary', value: false },
+      { text: '🏠 Comprar Casa', class: 'btn btn-success', value: true }
+    ],
+    'bg-primary text-white'
+  );
+  
+  if (buyHouse) {
+    player.money -= 100;
+    property.houses++;
+    this.addToLog(`${player.nick_name} construyó una casa en ${property.name} (${property.houses}/4)`);
+    this.render();
+    this.initializeGameControls();
+  }
+}
+
   //Cambiar al siguiente jugador
   nextPlayer() {
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     this.renderPlayersPanel();
+    this.updatePlayerTokens(); // Asegurar fichas visibles al cambiar turno
 
     // Guardar estado después de cambiar de jugador
     localStorage.setItem('monopoly_players', JSON.stringify(this.players));

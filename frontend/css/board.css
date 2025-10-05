@@ -496,3 +496,90 @@
   grid-column: attr(data-grid-column number);
   grid-row: attr(data-grid-row number);
 }
+
+/* Colores de barras de propiedades */
+.square-color-brown { background-color: #8B4513; }
+.square-color-purple { background-color: #9370DB; }
+.square-color-pink { background-color: #FF69B4; }
+.square-color-orange { background-color: #FFA500; }
+.square-color-red { background-color: #FF0000; }
+.square-color-yellow { background-color: #FFD700; }
+.square-color-green { background-color: #008000; }
+.square-color-blue { background-color: #0000FF; }
+
+/* Estado de propiedades */
+.square-status.property-available {
+  background-color: #fff;
+  color: #666;
+}
+
+.square-status.property-owned {
+  background-color: var(--player-color, #ccc);
+  color: #fff;
+}
+
+/* Tokens de jugadores */
+.player-token {
+  background-color: var(--player-color, #000);
+}
+
+/* Grid positioning - genera clases para 1-11 */
+.grid-col-1 { grid-column: 1; }
+.grid-col-2 { grid-column: 2; }
+.grid-col-3 { grid-column: 3; }
+.grid-col-4 { grid-column: 4; }
+.grid-col-5 { grid-column: 5; }
+.grid-col-6 { grid-column: 6; }
+.grid-col-7 { grid-column: 7; }
+.grid-col-8 { grid-column: 8; }
+.grid-col-9 { grid-column: 9; }
+.grid-col-10 { grid-column: 10; }
+.grid-col-11 { grid-column: 11; }
+
+.grid-row-1 { grid-row: 1; }
+.grid-row-2 { grid-row: 2; }
+.grid-row-3 { grid-row: 3; }
+.grid-row-4 { grid-row: 4; }
+.grid-row-5 { grid-row: 5; }
+.grid-row-6 { grid-row: 6; }
+.grid-row-7 { grid-row: 7; }
+.grid-row-8 { grid-row: 8; }
+.grid-row-9 { grid-row: 9; }
+.grid-row-10 { grid-row: 10; }
+.grid-row-11 { grid-row: 11; }
+
+/* Input manual de dados */
+.dice-manual-input {
+  width: 165px;
+  margin: 5px auto;
+  display: block;
+}
+
+/* Panel lateral fijo */
+.player-sidebar {
+  background-color: #fff;
+  min-height: 100vh;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 20%; /* col-lg-2 */
+  z-index: 1000;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.sidebar-content {
+  padding: 1rem;
+}
+
+/* Ajustar el tablero para que no quede detrás del sidebar */
+.col-lg-10.col-md-9 {
+  margin-left: 16.666667%; /* mismo ancho que col-lg-2 */
+}
+
+/* Botones de construcción */
+.btn-outline-success {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
