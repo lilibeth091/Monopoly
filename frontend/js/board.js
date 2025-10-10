@@ -622,7 +622,7 @@ renderUnmortgageButton(player, playerIndex) {
   if (!diceArea) return;
   
   let optionsHTML = `
-    <button id="rollDiceBtn" class="btn btn-primary" disabled style="opacity: 0.5;">🎲 Lanzar dados</button>
+    <button id="rollDiceBtn" class="btn btn-primary" disabled>🎲 Lanzar dados</button>
     <div class="mt-2">
       <input type="number" id="manualDiceInput" class="form-control form-control-sm dice-manual-input" 
              placeholder="Ingresa valor (1-12)" min="1" max="12">
@@ -1148,7 +1148,7 @@ const body = `
   <div class="mb-3">
     <div class="display-1">💸</div>
   </div>
-  <p><strong>Propietario:</strong> <span style="color: ${owner.color_hex}">${owner.nick_name}</span></p>
+  <p><strong>Propietario:</strong> ${owner.nick_name}</p>
   <p><strong>Renta pagada:</strong> <span class="fs-4 text-danger">$${rent}</span></p>
   <p class="small">Tu dinero restante: <strong>$${player.money}</strong></p>
 `;

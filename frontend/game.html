@@ -24,14 +24,12 @@
           </div>
           
           <div class="d-grid gap-2 buttons-container">
-            <button id="btnSaveScore" class="btn btn-success btn-sm">
-              💾 Guardar Puntajes
-            </button>
             <button id="btnEndGame" class="btn btn-danger btn-sm">
               🛑 Terminar Juego
             </button>
-            <a href="index.html" class="btn btn-secondary btn-sm">
+            <button id="btnBackToHome" class="btn btn-secondary btn-sm">
               🏠 Volver al Inicio
+            </button>
             </a>
           </div>
         </div>
@@ -66,46 +64,6 @@
   <!-- API y lógica del tablero -->
   <script src="js/api.js"></script>
   <script src="js/board.js"></script>
-
-  <script>
-    // Guardar puntajes al finalizar
-    document.getElementById('btnSaveScore').addEventListener('click', async () => {
-      if (!window.monopolyBoard) {
-        alert('⚠️ No hay juego activo');
-        return;
-      }
-      
-      const players = window.monopolyBoard.players;
-      
-      if (confirm('¿Deseas guardar los puntajes actuales de todos los jugadores?')) {
-        try {
-          for (const player of players) {
-            await MonopolyAPI.saveScore(player.nick_name, player.money, player.country_code);
-          }
-          alert('✅ Puntajes guardados exitosamente');
-        } catch (error) {
-          alert('❌ Error al guardar puntajes: ' + error.message);
-          console.error('Error completo:', error);
-        }
-      }
-    });
-
-    // Terminar juego
-    document.getElementById('btnEndGame').addEventListener('click', () => {
-      if (confirm('⚠️ ¿Estás seguro que quieres terminar el juego?\n\nSe perderá el progreso no guardado.')) {
-        localStorage.removeItem('monopoly_players');
-        window.location.href = 'index.html';
-      }
-    });
-
-    // Verificar si hay datos de jugadores al cargar
-    window.addEventListener('DOMContentLoaded', () => {
-      const playersData = localStorage.getItem('monopoly_players');
-      if (!playersData) {
-        alert('⚠️ No se encontraron datos de jugadores. Serás redirigido al inicio.');
-        window.location.href = 'index.html';
-      }
-    });
-  </script>
+  <script src="js/game.js"></script>
 </body>
 </html>

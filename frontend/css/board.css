@@ -585,3 +585,15 @@
   font-size: 0.75rem;
   padding: 4px 8px;
 }
+
+/* Estilos para textos con color de jugador */
+.player-colored-text {
+  color: var(--player-color, #333);
+  font-weight: bold;
+}
+
+/* Botón de dados deshabilitado (para cuando está en cárcel) */
+#rollDiceBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
