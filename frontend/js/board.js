@@ -19,9 +19,11 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
     modalBody.innerHTML = body;
     modalHeader.className = `modal-header ${headerClass}`;
     
-    // OCULTAR el botón de cerrar (X)
+    // OCULTAR el botón de cerrar (X) con clase de Bootstrap
     const closeBtn = modalHeader.querySelector('.btn-close');
-    closeBtn.style.display = 'none';
+    if (closeBtn) {
+      closeBtn.classList.add('d-none');
+    }
 
     // Limpiar y agregar botones
     modalFooter.innerHTML = '';
@@ -38,8 +40,8 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
 
     // Mostrar modal con opciones que impiden cerrarlo con ESC o click fuera
     const bsModal = new bootstrap.Modal(modal, {
-      backdrop: 'static',  // No se cierra al hacer click fuera
-      keyboard: false      // No se cierra con la tecla ESC
+      backdrop: 'static',
+      keyboard: false
     });
     bsModal.show();
   });
@@ -155,19 +157,19 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
     this.renderPlayersPanel();
 
     // Aplicar colores de propietarios a las propiedades
-    this.players.forEach(player => {
-      if (player.properties) {
-        player.properties.forEach(prop => {
-          const square = document.querySelector(`[data-square-id="${prop.id}"]`);
-          if (square) {
-            const status = square.querySelector('.square-status.property-owned');
-            if (status) {
-              status.style.setProperty('--player-color', player.color_hex);
-            }
-          }
-        });
+this.players.forEach(player => {
+  if (player.properties) {
+    player.properties.forEach(prop => {
+      const square = document.querySelector(`[data-square-id="${prop.id}"]`);
+      if (square) {
+        const status = square.querySelector('.square-status.property-owned');
+        if (status) {
+          status.dataset.ownerColor = player.color;
+        }
       }
     });
+  }
+});
     // Asegurar que las fichas se muestren después de renderizar
     this.updatePlayerTokens();
   }
@@ -418,10 +420,10 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
       
       panel.appendChild(playerDiv);
 
-      // Aplicar color del jugador al token
+      // Aplicar color del jugador al token usando data attribute
       const tokenInPanel = playerDiv.querySelector('.player-token');
       if (tokenInPanel) {
-        tokenInPanel.style.setProperty('--player-color', player.color_hex);
+        tokenInPanel.dataset.playerColor = player.color;
       }
     });
   }
@@ -758,27 +760,27 @@ async payToLeaveJail() {
   const player = this.players[this.currentPlayerIndex];
   
   if (isDoubles) {
-  this.addToLog(`${player.nick_name} sacó pares y sale de la cárcel!`);
-  player.in_jail = false;
-  player.jail_turns = 0;
-  player.doubles_count = 0;
-  
-  // Mostrar modal de éxito
-  const body = `
-    <div class="mb-3">
-      <div class="display-1">🎉</div>
-    </div>
-    <p class="fs-5 text-success"><strong>¡Sacaste pares y sales de la cárcel!</strong></p>
-    <p class="mt-3">Avanzarás <strong>${total} casillas (el total que sacaste en los pares)</strong>.</p>
-  `;
-  
-  await this.showModal('¡Libre!', body, [
-    { text: 'Aceptar', class: 'btn btn-success', value: true }
-  ], 'bg-success text-white');
-  
-  this.restoreDiceButton();
-  await this.movePlayer(this.currentPlayerIndex, total, false);
-} else {
+    this.addToLog(`${player.nick_name} sacó pares y sale de la cárcel!`);
+    player.in_jail = false;
+    player.jail_turns = 0;
+    player.doubles_count = 0;
+    
+    // Mostrar modal de éxito
+    const body = `
+      <div class="mb-3">
+        <div class="display-1">🎉</div>
+      </div>
+      <p class="fs-5 text-success"><strong>¡Sacaste pares y sales de la cárcel!</strong></p>
+      <p class="mt-3">Avanzarás <strong>${total} casillas (el total que sacaste en los pares)</strong>.</p>
+    `;
+    
+    await this.showModal('¡Libre!', body, [
+      { text: 'Aceptar', class: 'btn btn-success', value: true }
+    ], 'bg-success text-white');
+    
+    this.restoreDiceButton();
+    await this.movePlayer(this.currentPlayerIndex, total, false);
+  } else {
     player.jail_turns++;
     
     if (player.jail_turns >= 3) {
@@ -823,7 +825,10 @@ async payToLeaveJail() {
           { text: '🎲 Continuar', class: 'btn btn-success', value: true }
         ], 'bg-success text-white');
         
-        this.movePlayer(this.currentPlayerIndex, total, false);
+        //Restaurar botón de dados ANTES de mover al jugador
+        this.restoreDiceButton();
+        
+        await this.movePlayer(this.currentPlayerIndex, total, false);
       } else {
         this.addToLog(`${player.nick_name} no tiene $50 para pagar!`);
         
@@ -833,37 +838,39 @@ async payToLeaveJail() {
           </div>
           <p class="fs-5 text-danger">¡Sin fondos!</p>
           <p>No tienes suficiente dinero para pagar $50.</p>
-          <p class="small">Debes hipotecar propiedades o declararte en quiebra.</p>
         `;
         
         await this.showModal('Bancarrota', body, [
           { text: 'Entendido', class: 'btn btn-danger', value: true }
         ], 'bg-danger text-white');
         
+        //Restaurar botón de dados ANTES de cambiar de jugador
+        this.restoreDiceButton();
+        
         this.nextPlayer();
       }
     } else {
-  this.addToLog(`${player.nick_name} no sacó pares. Sigue en la cárcel (intento ${player.jail_turns}/3)`);
-  this.renderPlayersPanel();
-  this.updatePlayerTokens();
-  
-  // Mostrar modal informativo
-  const body = `
-    <div class="mb-3">
-      <div class="display-1">🚔</div>
-    </div>
-    <p class="fs-5 text-danger">No sacaste pares</p>
-    <p>Sigues en la cárcel.</p>
-    <p class="small mt-2">Intento <strong>${player.jail_turns}/3</strong></p>
-  `;
-  
-  await this.showModal('En la cárcel', body, [
-    { text: 'Aceptar', class: 'btn btn-primary', value: true }
-  ], 'bg-danger text-white');
-  
-  this.restoreDiceButton();
-  this.nextPlayer();
-}
+      this.addToLog(`${player.nick_name} no sacó pares. Sigue en la cárcel (intento ${player.jail_turns}/3)`);
+      this.renderPlayersPanel();
+      this.updatePlayerTokens();
+      
+      // Mostrar modal informativo
+      const body = `
+        <div class="mb-3">
+          <div class="display-1">🚔</div>
+        </div>
+        <p class="fs-5 text-danger">No sacaste pares</p>
+        <p>Sigues en la cárcel.</p>
+        <p class="small mt-2">Intento <strong>${player.jail_turns}/3</strong></p>
+      `;
+      
+      await this.showModal('En la cárcel', body, [
+        { text: 'Aceptar', class: 'btn btn-primary', value: true }
+      ], 'bg-danger text-white');
+      
+      this.restoreDiceButton();
+      this.nextPlayer();
+    }
   }
 }
 
@@ -948,24 +955,24 @@ this.showModal('¡A la cárcel!', body, [
 
   //Actualizar posición visual de las fichas
   updatePlayerTokens() {
-    // Limpiar todas las áreas de tokens
-    document.querySelectorAll('.tokens-area').forEach(area => area.innerHTML = '');
+  // Limpiar todas las áreas de tokens
+  document.querySelectorAll('.tokens-area').forEach(area => area.innerHTML = '');
 
-    // Colocar fichas en sus posiciones
-    this.players.forEach(player => {
-      const square = document.querySelector(`[data-square-id="${player.position}"]`);
-      if (square) {
-        const tokensArea = square.querySelector('.tokens-area');
-        if (tokensArea) {
-          const token = document.createElement('div');
-          token.className = 'player-token';
-          token.style.setProperty('--player-color', player.color_hex);
-          token.title = player.nick_name;
-          tokensArea.appendChild(token);
-        }
+  // Colocar fichas en sus posiciones
+  this.players.forEach(player => {
+    const square = document.querySelector(`[data-square-id="${player.position}"]`);
+    if (square) {
+      const tokensArea = square.querySelector('.tokens-area');
+      if (tokensArea) {
+        const token = document.createElement('div');
+        token.className = 'player-token';
+        token.dataset.playerColor = player.color;
+        token.title = player.nick_name;
+        tokensArea.appendChild(token);
       }
-    });
-  }
+    }
+  });
+}
 
   //Procesar la casilla donde cayó el jugador
   //Esta función coordina todas las acciones y SIEMPRE cambia de turno al final

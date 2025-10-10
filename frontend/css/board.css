@@ -597,3 +597,23 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Colores dinámicos para propiedades owned usando data attributes */
+.square-status.property-owned[data-owner-color="red"] { background-color: #d9534f; }
+.square-status.property-owned[data-owner-color="blue"] { background-color: #0d6efd; }
+.square-status.property-owned[data-owner-color="green"] { background-color: #198754; }
+.square-status.property-owned[data-owner-color="yellow"] { background-color: #ffc107; }
+.square-status.property-owned[data-owner-color="purple"] { background-color: #6f42c1; }
+.square-status.property-owned[data-owner-color="orange"] { background-color: #fd7e14; }
+.square-status.property-owned[data-owner-color="black"] { background-color: #212529; }
+.square-status.property-owned[data-owner-color="pink"] { background-color: #e83e8c; }
+
+/* Tokens con colores específicos usando data attributes */
+.player-token[data-player-color="red"] { background-color: #d9534f; }
+.player-token[data-player-color="blue"] { background-color: #0d6efd; }
+.player-token[data-player-color="green"] { background-color: #198754; }
+.player-token[data-player-color="yellow"] { background-color: #ffc107; }
+.player-token[data-player-color="purple"] { background-color: #6f42c1; }
+.player-token[data-player-color="orange"] { background-color: #fd7e14; }
+.player-token[data-player-color="black"] { background-color: #212529; }
+.player-token[data-player-color="pink"] { background-color: #e83e8c; }

@@ -14,10 +14,10 @@ function showModal(title, body, buttons, headerClass = 'bg-primary text-white') 
     modalBody.innerHTML = body;
     modalHeader.className = `modal-header ${headerClass}`;
     
-    // Ocultar el botón de cerrar (X)
+    // Ocultar el botón de cerrar (X) con clase de Bootstrap
     const closeBtn = modalHeader.querySelector('.btn-close');
     if (closeBtn) {
-      closeBtn.style.display = 'none';
+      closeBtn.classList.add('d-none');
     }
 
     // Limpiar y agregar botones

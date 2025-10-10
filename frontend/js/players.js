@@ -383,7 +383,7 @@ async function showRanking() {
 function showLoading(message = 'Cargando...') {
   const loading = document.createElement('div');
   loading.id = 'loadingOverlay';
-  loading.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:center;z-index:9999;';
+  loading.className = 'loading-overlay';
   loading.innerHTML = `<div class="spinner-border text-light" role="status"><span class="visually-hidden">${message}</span></div>`;
   document.body.appendChild(loading);
 }
