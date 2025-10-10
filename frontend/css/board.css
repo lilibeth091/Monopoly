@@ -506,6 +506,8 @@
 .square-color-yellow { background-color: #FFD700; }
 .square-color-green { background-color: #008000; }
 .square-color-blue { background-color: #0000FF; }
+.square-color-gray { background-color: #999999; }
+
 
 /* Estado de propiedades */
 .square-status.property-available {

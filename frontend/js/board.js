@@ -235,22 +235,32 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
 
   //Renderizar casilla de propiedad
   renderPropertySquare(square) {
-    const owner = this.getPropertyOwner(square.id);
-    const status = owner ? owner.color_hex : '#fff';
-    const statusText = owner ? `Jugador: ${owner.nick_name}` : 'Disponible';
+  const owner = this.getPropertyOwner(square.id);
+  const status = owner ? owner.color_hex : '#fff';
+  const statusText = owner ? `Jugador: ${owner.nick_name}` : 'Disponible';
+  
+  // Verificar si la propiedad está hipotecada
+  let isMortgaged = false;
+  if (owner) {
+    const ownerProperty = owner.properties.find(p => p.id === square.id);
+    isMortgaged = ownerProperty?.mortgaged || false;
+  }
+  
+  // Si está hipotecada, usar color gris; si no, usar el color original
+  const colorClass = isMortgaged ? 'gray' : square.color;
 
-    return `
-    <div class="square-color-bar square-color-${square.color}"></div>
+  return `
+    <div class="square-color-bar square-color-${colorClass}"></div>
     <div class="square-status ${owner ? 'property-owned' : 'property-available'}" data-owner="${owner ? owner.nick_name : ''}">
     ${statusText}
     </div>
-      <div class="square-content">
-        <div class="square-name">${square.name}</div>
-        <div class="square-price">$${square.price}</div>
-        ${this.renderBuildingsInfo(square.id)}
-      </div>
-    `;
-  }
+    <div class="square-content">
+      <div class="square-name">${square.name}</div>
+      <div class="square-price">$${square.price}</div>
+      ${this.renderBuildingsInfo(square.id)}
+    </div>
+  `;
+}
 
   //Renderizar información de construcciones
   renderBuildingsInfo(squareId) {
@@ -392,18 +402,18 @@ showModal(title, body, buttons, headerClass = 'bg-primary text-white') {
       playerDiv.innerHTML = `
       <div class="player-token player-color-${index}"></div>
       <div class="player-details">
-
-          <strong>
-          ${player.nick_name}
-          ${flagUrl ? `<img class="player-flag" src="${flagUrl}" alt="${code}">` : ''}
-          </strong>
-
-          ${jailBadge}
-          <div>Dinero: $${player.money}</div>
-         <div>Propiedades: ${props.length}</div>
-        ${propsList}
-        ${isCurrentPlayer ? this.renderBuildButtons(player, index) : ''}
-        </div>
+      <strong>
+       ${player.nick_name}
+        ${flagUrl ? `<img class="player-flag" src="${flagUrl}" alt="${code}">` : ''}
+      </strong>
+      ${jailBadge}
+      <div>Dinero: $${player.money}</div>
+      <div>Propiedades: ${props.length}</div>
+      ${propsList}
+      ${isCurrentPlayer ? this.renderBuildButtons(player, index) : ''}
+      ${isCurrentPlayer ? this.renderMortgageButton(player, index) : ''}
+      ${isCurrentPlayer ? this.renderUnmortgageButton(player, index) : ''}
+      </div>
       `;
       
       panel.appendChild(playerDiv);
@@ -427,12 +437,55 @@ renderBuildButtons(player, playerIndex) {
     }
     
     // Solo propiedades con color y que tengan monopolio
-    return square && square.type === 'property' && square.color && 
-           this.hasColorMonopoly(playerIndex, square.color) &&
-           (!prop.hotel); // No mostrar si ya tiene hotel
+    if (!square || square.type !== 'property' || !square.color) {
+      return false;
+    }
+    
+    // No mostrar si ya tiene hotel
+    if (prop.hotel) {
+      return false;
+    }
+    
+    // Verificar monopolio
+    if (!this.hasColorMonopoly(playerIndex, square.color)) {
+      return false;
+    }
+    
+    // NUEVO: Verificar que ninguna propiedad del mismo color esté hipotecada
+    const colorProperties = player.properties.filter(p => {
+      let sq = null;
+      for (const side of ['bottom', 'left', 'top', 'right']) {
+        sq = this.boardData[side]?.find(s => s.id === p.id);
+        if (sq) break;
+      }
+      return sq && sq.color === square.color;
+    });
+    
+    // Si alguna del mismo color está hipotecada, no permitir construcción
+    const hasAnyMortgaged = colorProperties.some(p => p.mortgaged);
+    if (hasAnyMortgaged) {
+      return false;
+    }
+    
+    return true;
   });
   
-  if (buildableProps.length === 0) return '';
+  if (buildableProps.length === 0) {
+    // Verificar si tiene monopolios pero con propiedades hipotecadas
+    const monopoliesWithMortgage = this.checkMonopoliesWithMortgage(player, playerIndex);
+    
+    if (monopoliesWithMortgage.length > 0) {
+      return `
+        <div class="mt-2">
+          <small class="text-warning">
+            ⚠️ Debes deshipotecar todas las propiedades del mismo color para construir
+          </small>
+        </div>
+      `;
+    }
+    
+    return '';
+  }
   
   let html = '<div class="mt-2"><small class="text-muted">Construir:</small>';
   buildableProps.forEach(prop => {
@@ -450,7 +503,39 @@ renderBuildButtons(player, playerIndex) {
   return html;
 }
 
+//Crear botón de hipoteca
+renderMortgageButton(player, playerIndex) {
+  // Verificar si tiene propiedades que NO estén hipotecadas
+  const mortgageableProps = (player.properties || []).filter(prop => !prop.mortgaged);
+  
+  if (mortgageableProps.length === 0) return '';
+  
+  return `
+    <div class="mt-2">
+      <button class="btn btn-sm btn-warning w-100" 
+              onclick="monopolyBoard.showMortgageOptions(${playerIndex}, false)">
+        💰 Hipotecar Propiedades (${mortgageableProps.length})
+      </button>
+    </div>
+  `;
+}
 
+//Botón para deshipotecar
+renderUnmortgageButton(player, playerIndex) {
+  // Verificar si tiene propiedades hipotecadas
+  const mortgagedProps = (player.properties || []).filter(prop => prop.mortgaged);
+  
+  if (mortgagedProps.length === 0) return '';
+  
+  return `
+    <div class="mt-2">
+      <button class="btn btn-sm btn-info w-100" 
+              onclick="monopolyBoard.showUnmortgageOptions(${playerIndex})">
+        🏠 Deshipotecar Propiedades (${mortgagedProps.length})
+      </button>
+    </div>
+  `;
+}
 
   // Inicializar controles del juego
   initializeGameControls() {
@@ -582,20 +667,19 @@ async payToLeaveJail() {
   const player = this.players[this.currentPlayerIndex];
   
   if (player.money < 50) {
-    const body = `
-      <div class="mb-3">
-        <div class="display-1">❌</div>
-      </div>
-      <p class="text-danger">No tienes suficiente dinero para pagar.</p>
-      <p>Necesitas: <strong>$50</strong></p>
-      <p>Tienes: <strong>$${player.money}</strong></p>
-    `;
-    
-    await this.showModal('Dinero insuficiente', body, [
-      { text: 'Entendido', class: 'btn btn-danger', value: true }
-    ], 'bg-danger text-white');
-    return;
-  }
+  await this.showModal(
+    'Dinero insuficiente',
+    `<div class="mb-3">
+      <div class="display-1">❌</div>
+    </div>
+    <p class="text-danger">No tienes suficiente dinero para pagar.</p>
+    <p>Necesitas: <strong>$50</strong></p>
+    <p>Tienes: <strong>$${player.money}</strong></p>`,
+    [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+    'bg-danger text-white'
+  );
+  return;
+}
   
   player.money -= 50;
   player.in_jail = false;
@@ -933,7 +1017,7 @@ this.showModal('¡A la cárcel!', body, [
   }
 
   //Manejar casilla de propiedad
-  async handlePropertySquare(playerIndex, square) {
+async handlePropertySquare(playerIndex, square) {
   const owner = this.getPropertyOwner(square.id);
   const player = this.players[playerIndex];
 
@@ -969,7 +1053,8 @@ this.showModal('¡A la cárcel!', body, [
           id: square.id,
           name: square.name,
           houses: 0,
-          hotel: false
+          hotel: false,
+          mortgaged: false 
         });
         this.addToLog(`${player.nick_name} compró ${square.name}`);
         this.render();
@@ -997,52 +1082,83 @@ this.showModal('¡A la cárcel!', body, [
     this.renderPlayersPanel();
 
   } else if (owner.nick_name !== player.nick_name) {
+    // Buscar la propiedad en el owner para verificar si está hipotecada
+    const ownerProperty = owner.properties.find(p => p.id === square.id);
+
+    // VALIDAR HIPOTECA PARA TODO TIPO DE PROPIEDAD (incluyendo ferrocarriles)
+    if (ownerProperty?.mortgaged) {
+      this.addToLog(`${square.name} está hipotecada, no se cobra renta`);
+      await this.showModal(
+        'Propiedad Hipotecada',
+        `<p>Esta propiedad está hipotecada.</p>
+         <p>No se puede cobrar renta.</p>`,
+        [{ text: 'Continuar', class: 'btn btn-info', value: true }],
+        'bg-info text-white'
+      );
+      return;
+    }
+
     // Calcular renta
     let rent = 0;
     
     if (square.type === 'railroad') {
       const railroadCount = (owner.properties || []).filter(prop => {
-        for (const side of ['bottom', 'left', 'top', 'right']) {
-          const sq = this.boardData[side]?.find(s => s.id === prop.id);
-          if (sq && sq.type === 'railroad') return true;
-        }
-        return false;
-      }).length;
-      
-      rent = square.rent[railroadCount] || 0;
-    } else {
-       // Buscar la propiedad en el owner para ver casas/hotel
-  const ownerProperty = owner.properties.find(p => p.id === square.id);
-  
-  if (ownerProperty.hotel) {
-    rent = square.rent?.withHotel || 0;
-  } else if (ownerProperty.houses > 0) {
-    rent = square.rent?.withHouse?.[ownerProperty.houses - 1] || square.rent?.base || 0;
-  } else {
-    rent = square.rent?.base || 0;
+    // Solo contar ferrocarriles NO hipotecados
+    if (prop.mortgaged) return false;
+    
+    for (const side of ['bottom', 'left', 'top', 'right']) {
+      const sq = this.boardData[side]?.find(s => s.id === prop.id);
+      if (sq && sq.type === 'railroad') return true;
     }
-  }
-    
-    player.money -= rent;
-    owner.money += rent;
-    this.addToLog(`${player.nick_name} pagó $${rent} de renta a ${owner.nick_name}`);
-    
-    // Mostrar modal de pago de renta
-    const body = `
-      <div class="mb-3">
-        <div class="display-1">💸</div>
-      </div>
-      <p><strong>Propietario:</strong> <span style="color: ${owner.color_hex}">${owner.nick_name}</span></p>
-      <p><strong>Renta a pagar:</strong> <span class="fs-4 text-danger">$${rent}</span></p>
-      <p class="small text-muted">Debes pagar la renta al dueño.</p>
-      <p class="small">Tu dinero restante: <strong>$${player.money}</strong></p>
-    `;
-    
-    await this.showModal(square.name, body, [
-      { text: '💳 Pagar', class: 'btn btn-warning', value: true }
-    ], 'bg-warning text-dark');
-    
-    this.renderPlayersPanel();
+    return false;
+  }).length;
+  
+  rent = square.rent[railroadCount.toString()] || 0;
+} else {
+      // Para propiedades normales
+      if (ownerProperty.hotel) {
+        rent = square.rent?.withHotel || 0;
+      } else if (ownerProperty.houses > 0) {
+        rent = square.rent?.withHouse?.[ownerProperty.houses - 1] || square.rent?.base || 0;
+      } else {
+        rent = square.rent?.base || 0;
+      }
+    }
+
+    // Validar que tenga dinero suficiente
+if (player.money < rent) {
+  await this.showModal(
+    'Dinero insuficiente',
+    `<p class="text-danger">No tienes suficiente dinero para pagar la renta.</p>
+     <p>Renta: <strong>$${rent}</strong></p>
+     <p>Tu dinero: <strong>$${player.money}</strong></p>`,
+    [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+    'bg-danger text-white'
+  );
+  return; 
+}
+
+// PROCESAR PAGO
+player.money -= rent;
+owner.money += rent;
+this.addToLog(`${player.nick_name} pagó $${rent} de renta a ${owner.nick_name}`);
+
+// Mostrar modal de pago de renta
+const body = `
+  <div class="mb-3">
+    <div class="display-1">💸</div>
+  </div>
+  <p><strong>Propietario:</strong> <span style="color: ${owner.color_hex}">${owner.nick_name}</span></p>
+  <p><strong>Renta pagada:</strong> <span class="fs-4 text-danger">$${rent}</span></p>
+  <p class="small">Tu dinero restante: <strong>$${player.money}</strong></p>
+`;
+
+await this.showModal(square.name, body, [
+  { text: '✅ Continuar', class: 'btn btn-success', value: true }
+], 'bg-warning text-dark');
+
+this.renderPlayersPanel();
+
   } else {
     this.addToLog(`${player.nick_name} cayó en su propia propiedad`);
     this.renderPlayersPanel();
@@ -1050,50 +1166,157 @@ this.showModal('¡A la cárcel!', body, [
 }
 
   //Manejar casilla de impuesto
-  async handleTaxSquare(playerIndex, square) {
+async handleTaxSquare(playerIndex, square) {
   const player = this.players[playerIndex];
   const money = square.action.money;
   const isPaying = money < 0;
   
-  this.addToLog(`${player.nick_name} ${isPaying ? 'pagó' : 'recibió'} $${Math.abs(money)}`);
-  
-  const body = `
-    <div class="mb-3">
-      <div class="display-1">💰</div>
-    </div>
-    <p class="fs-5">${square.name}</p>
-    <div class="mt-3">
-      <p class="mb-2">${isPaying ? 'Debes pagar:' : 'Recibes:'}</p>
-      <span class="fs-3 ${isPaying ? 'text-danger' : 'text-success'}">
-        ${isPaying ? '-' : '+'}$${Math.abs(money)}
-      </span>
-    </div>
-    <p class="small mt-3">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money + money}</strong></p>
-  `;
-
-  const buttons = [
-    { 
-      text: isPaying ? '💳 Pagar' : '✅ Aceptar', 
-      class: isPaying ? 'btn btn-danger' : 'btn btn-success', 
-      value: true 
-    }
-  ];
-
-  await this.showModal(square.name, body, buttons, isPaying ? 'bg-danger text-white' : 'bg-success text-white');
-
-  // Procesar el pago después de mostrar el modal
-  player.money += money;
-  
-  this.renderPlayersPanel();
+ // Validar si tiene que pagar y no tiene dinero
+if (isPaying && player.money < Math.abs(money)) {
+  await this.showModal(
+    'Dinero insuficiente',
+    `<p class="text-danger">No tienes suficiente dinero para pagar el impuesto.</p>
+     <p>Impuesto: <strong>$${Math.abs(money)}</strong></p>
+     <p>Tu dinero: <strong>$${player.money}</strong></p>`,
+    [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+    'bg-danger text-white'
+  );
+  return; // Sale sin procesar el pago
 }
 
-  //Manejar Caja de Comunidad
-  async handleCommunityChest(playerIndex) {
+// Mostrar modal del impuesto
+this.addToLog(`${player.nick_name} ${isPaying ? 'pagó' : 'recibió'} $${Math.abs(money)}`);
+
+const body = `
+  <div class="mb-3">
+    <div class="display-1">💰</div>
+  </div>
+  <p class="fs-5">${square.name}</p>
+  <div class="mt-3">
+    <p class="mb-2">${isPaying ? 'Debes pagar:' : 'Recibes:'}</p>
+    <span class="fs-3 ${isPaying ? 'text-danger' : 'text-success'}">
+      ${isPaying ? '-' : '+'}$${Math.abs(money)}
+    </span>
+  </div>
+  <p class="small mt-3">Dinero actual: <strong>$${player.money}</strong> → <strong>$${player.money + money}</strong></p>
+`;
+
+const buttons = [
+  { 
+    text: isPaying ? '💳 Pagar' : '✅ Aceptar', 
+    class: isPaying ? 'btn btn-danger' : 'btn btn-success', 
+    value: true 
+  }
+];
+
+await this.showModal(square.name, body, buttons, isPaying ? 'bg-danger text-white' : 'bg-success text-white');
+
+// PROCESAR EL PAGO (solo una vez)
+player.money += money;
+this.renderPlayersPanel();
+}
+
+  //Obtener dueño de una propiedad
+  getPropertyOwner(squareId) {
+    for (const player of this.players) {
+      if (player.properties?.some(prop => prop.id === squareId)) {
+        return player;
+      }
+    }
+    return null;
+  }
+
+  //Buscar casilla por id
+  getSquareById(squareId) {
+  for (const side of ['bottom', 'left', 'top', 'right']) {
+    const square = this.boardData[side]?.find(s => s.id === squareId);
+    if (square) return square;
+  }
+  return null;
+}
+
+  //para casas, revisa si el jugador posee todas las propiedades del mismo color
+  hasColorMonopoly(playerIndex, color) {
+  const player = this.players[playerIndex];
+  
+  // Obtener todas las propiedades de ese color del tablero
+  const colorProperties = [];
+  for (const side of ['bottom', 'left', 'top', 'right']) {
+    this.boardData[side].forEach(square => {
+      if (square.type === 'property' && square.color === color) {
+        colorProperties.push(square.id);
+      }
+    });
+  }
+  
+  // Verificar si el jugador posee todas
+  const playerPropertyIds = (player.properties || []).map(p => p.id);
+  return colorProperties.every(id => playerPropertyIds.includes(id));
+}
+
+// Verificar si tiene monopolios pero con propiedades hipotecadas
+checkMonopoliesWithMortgage(player, playerIndex) {
+  const monopoliesWithMortgage = [];
+  
+  // Obtener todos los colores únicos de las propiedades del jugador
+  const playerColors = new Set();
+  
+  player.properties.forEach(prop => {
+    let square = null;
+    for (const side of ['bottom', 'left', 'top', 'right']) {
+      square = this.boardData[side]?.find(s => s.id === prop.id);
+      if (square) break;
+    }
+    
+    if (square && square.type === 'property' && square.color) {
+      playerColors.add(square.color);
+    }
+  });
+  
+  // Para cada color, verificar si tiene monopolio y si hay hipotecadas
+  playerColors.forEach(color => {
+    if (this.hasColorMonopoly(playerIndex, color)) {
+      const colorProps = player.properties.filter(p => {
+        let sq = null;
+        for (const side of ['bottom', 'left', 'top', 'right']) {
+          sq = this.boardData[side]?.find(s => s.id === p.id);
+          if (sq) break;
+        }
+        return sq && sq.color === color;
+      });
+      
+      const hasAnyMortgaged = colorProps.some(p => p.mortgaged);
+      if (hasAnyMortgaged) {
+        monopoliesWithMortgage.push(color);
+      }
+    }
+  });
+  
+  return monopoliesWithMortgage;
+}
+
+//Manejar Caja de Comunidad
+async handleCommunityChest(playerIndex) {
   const card = await MonopolyAPI.getCommunityChestCard();
   const player = this.players[playerIndex];
   this.addToLog(`Caja de Comunidad: ${card.description}`);
 
   const money = card.action?.money || 0;
+  
+  // Validar si tiene que pagar y no tiene dinero
+if (money < 0 && player.money < Math.abs(money)) {
+  await this.showModal(
+    'Dinero insuficiente',
+    `<p>${card.description}</p>
+     <p class="text-danger mt-2">No tienes suficiente dinero para pagar.</p>
+     <p>Necesitas: <strong>$${Math.abs(money)}</strong></p>
+     <p>Tienes: <strong>$${player.money}</strong></p>`,
+    [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+    'bg-danger text-white'
+  );
+  return;
+}
+
   const isPositive = money > 0;
   
   const body = `
@@ -1119,21 +1342,33 @@ this.showModal('¡A la cárcel!', body, [
 
   await this.showModal('Caja de Comunidad', body, buttons, 'bg-info text-white');
 
-  // Procesar dinero después de mostrar el modal
-  if (money) {
-    player.money += money;
-  }
-
+  // PROCESAR DINERO
+  player.money += money;
   this.renderPlayersPanel();
 }
 
-  //Manejar Sorpresa
-  async handleChance(playerIndex) {
+//Manejar Sorpresa
+async handleChance(playerIndex) {
   const card = await MonopolyAPI.getChanceCard();
   const player = this.players[playerIndex];
   this.addToLog(`Sorpresa: ${card.description}`);
 
   const money = card.action?.money || 0;
+  
+  // VALIDAR SI TIENE QUE PAGAR Y NO TIENE DINERO
+if (money < 0 && player.money < Math.abs(money)) {
+  await this.showModal(
+    'Dinero insuficiente',
+    `<p>${card.description}</p>
+     <p class="text-danger mt-2">No tienes suficiente dinero para pagar.</p>
+     <p>Necesitas: <strong>$${Math.abs(money)}</strong></p>
+     <p>Tienes: <strong>$${player.money}</strong></p>`,
+    [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+    'bg-danger text-white'
+  );
+  return;
+}
+  
   const isPositive = money > 0;
   
   const body = `
@@ -1159,41 +1394,9 @@ this.showModal('¡A la cárcel!', body, [
 
   await this.showModal('Sorpresa', body, buttons, 'bg-warning text-dark');
 
-  // Procesar dinero después de mostrar el modal
-  if (money) {
-    player.money += money;
-  }
-
+  // PROCESAR DINERO
+  player.money += money;
   this.renderPlayersPanel();
-}
-
-  //Obtener dueño de una propiedad
-  getPropertyOwner(squareId) {
-    for (const player of this.players) {
-      if (player.properties?.some(prop => prop.id === squareId)) {
-        return player;
-      }
-    }
-    return null;
-  }
-
-  //para casas, revisa si el jugador posee todas las propiedades del mismo color
-  hasColorMonopoly(playerIndex, color) {
-  const player = this.players[playerIndex];
-  
-  // Obtener todas las propiedades de ese color del tablero
-  const colorProperties = [];
-  for (const side of ['bottom', 'left', 'top', 'right']) {
-    this.boardData[side].forEach(square => {
-      if (square.type === 'property' && square.color === color) {
-        colorProperties.push(square.id);
-      }
-    });
-  }
-  
-  // Verificar si el jugador posee todas
-  const playerPropertyIds = (player.properties || []).map(p => p.id);
-  return colorProperties.every(id => playerPropertyIds.includes(id));
 }
 
 //para construir casas/hoteles:
@@ -1202,17 +1405,74 @@ async buildHouse(playerIndex, propertyId) {
   const property = player.properties.find(p => p.id === propertyId);
   
   if (!property) return;
+
+  // Verificar si la propiedad está hipotecada
+  if (property.mortgaged) {
+    await this.showModal(
+      '⚠️ Propiedad hipotecada',
+      `<p class="text-danger">No puedes construir en una propiedad hipotecada.</p>
+       <p class="small mt-2">Debes deshipotecar <strong>${property.name}</strong> primero.</p>`,
+      [{ text: 'Entendido', class: 'btn btn-warning', value: true }],
+      'bg-warning text-dark'
+    );
+    return;
+  }
+  
+  // Buscar la propiedad en el tablero para obtener su color
+  let square = null;
+  for (const side of ['bottom', 'left', 'top', 'right']) {
+    square = this.boardData[side]?.find(s => s.id === propertyId);
+    if (square) break;
+  }
+  
+  if (!square || !square.color) return;
+  
+  // Verificar que ninguna propiedad del mismo color esté hipotecada
+  const colorProperties = player.properties.filter(p => {
+    let sq = null;
+    for (const side of ['bottom', 'left', 'top', 'right']) {
+      sq = this.boardData[side]?.find(s => s.id === p.id);
+      if (sq) break;
+    }
+    return sq && sq.color === square.color;
+  });
+  
+  const mortgagedInColor = colorProperties.filter(p => p.mortgaged);
+  
+  if (mortgagedInColor.length > 0) {
+    const mortgagedNames = mortgagedInColor.map(p => p.name).join(', ');
+    await this.showModal(
+      '⚠️ Propiedades hipotecadas',
+      `<p class="text-danger">No puedes construir mientras tengas propiedades del mismo color hipotecadas.</p>
+       <p class="small mt-2">Propiedades hipotecadas: <strong>${mortgagedNames}</strong></p>
+       <p class="small mt-2">Debes deshipotecar todas primero.</p>`,
+      [{ text: 'Entendido', class: 'btn btn-warning', value: true }],
+      'bg-warning text-dark'
+    );
+    return;
+  }
   
   // Verificar si ya tiene hotel
   if (property.hotel) {
-    alert('⚠️ Esta propiedad ya tiene un hotel');
+    await this.showModal(
+      '⚠️ Ya tiene hotel',
+      `<p>La propiedad <strong>${property.name}</strong> ya tiene un hotel.</p>
+       <p class="small text-muted">No puedes construir más en esta propiedad.</p>`,
+      [{ text: 'Entendido', class: 'btn btn-primary', value: true }],
+      'bg-info text-white'
+    );
     return;
   }
   
   // Si tiene 4 casas, ofrecer hotel
   if (property.houses === 4) {
     if (player.money < 250) {
-      alert('⚠️ No tienes suficiente dinero para el hotel ($250)');
+      await this.showModal(
+      '⚠️ No puedes comprar el hotel',
+      `<p>No tienes suficiente dinero para el hotel ($250) en la propiedad <strong>${property.name}</strong></p>`,
+      [{ text: 'Entendido', class: 'btn btn-primary', value: true }],
+      'bg-info text-white'
+    );
       return;
     }
     
@@ -1241,7 +1501,13 @@ async buildHouse(playerIndex, propertyId) {
   
   // Comprar casa
   if (player.money < 100) {
-    alert('⚠️ No tienes suficiente dinero para una casa ($100)');
+    await this.showModal(
+      '⚠️ No puedes comprar la casa',
+      `<p>No tienes suficiente dinero para una casa ($100) en la propiedad <strong>${property.name}</strong>.</p>`,
+      
+      [{ text: 'Entendido', class: 'btn btn-primary', value: true }],
+      'bg-info text-white'
+    );
     return;
   }
   
@@ -1265,6 +1531,236 @@ async buildHouse(playerIndex, propertyId) {
     this.render();
     this.initializeGameControls();
   }
+}
+
+//Muestra opciones de hipoteca
+async showMortgageOptions(playerIndex) {
+  const player = this.players[playerIndex];
+  
+  if (!player.properties || player.properties.length === 0) {
+    await this.showModal(
+      'Sin propiedades',
+      '<p class="text-danger">No tienes propiedades para hipotecar.</p>',
+      [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+      'bg-danger text-white'
+    );
+    return;
+  }
+  
+  const mortgageableProps = player.properties.filter(p => !p.mortgaged);
+  
+  if (mortgageableProps.length === 0) {
+    await this.showModal(
+      'Sin propiedades disponibles',
+      '<p class="text-danger">Todas tus propiedades ya están hipotecadas.</p>',
+      [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+      'bg-danger text-white'
+    );
+    return;
+  }
+  
+  let body = '<div class="mortgage-options">';
+  body += '<p class="mb-3">Selecciona una propiedad para hipotecar:</p>';
+  body += '<div class="list-group mb-3">';
+  
+  mortgageableProps.forEach(prop => {
+    const square = this.getSquareById(prop.id);
+    const mortgageValue = square?.mortgage || 0;
+    body += `
+      <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+              onclick="monopolyBoard.handleMortgageClick(${playerIndex}, ${prop.id}); return false;">
+        <span>${prop.name}</span>
+        <span class="badge bg-success">+$${mortgageValue}</span>
+      </button>
+    `;
+  });
+  
+  body += '</div>';
+  body += `<p class="small text-muted">Dinero actual: <strong>$${player.money}</strong></p>`;
+  body += '</div>';
+  
+  await this.showModal(
+    '💰 Hipotecar Propiedades',
+    body,
+    [{ text: 'Cerrar', class: 'btn btn-secondary', value: false }],
+    'bg-warning text-dark'
+  );
+}
+
+// Manejar clic en propiedad para hipotecar
+async handleMortgageClick(playerIndex, propertyId) {
+  const modal = document.getElementById('gameModal');
+  const bsModal = bootstrap.Modal.getInstance(modal);
+  if (bsModal) {
+    bsModal.hide();
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  const player = this.players[playerIndex];
+  const property = player.properties.find(p => p.id === propertyId);
+  
+  if (!property || property.mortgaged) return;
+  
+  const square = this.getSquareById(propertyId);
+  const mortgageValue = square?.mortgage || 0;
+  
+  const confirm = await this.showModal(
+    '💰 Hipotecar Propiedad',
+    `<p>¿Deseas hipotecar <strong>${property.name}</strong>?</p>
+     <p class="text-success">Recibirás: <strong>$${mortgageValue}</strong></p>
+     <p class="small text-muted">Mientras esté hipotecada no se puede cobrar renta.</p>
+     <p class="small text-muted">Para deshipotecar pagarás: <strong>$${Math.ceil(mortgageValue * 1.1)}</strong> (valor + 10%)</p>
+     <p class="small text-warning mt-2">⚠️ Si no deshipotecas antes del final, no contará para el puntaje.</p>`,
+    [
+      { text: 'Cancelar', class: 'btn btn-secondary', value: false },
+      { text: '💰 Hipotecar', class: 'btn btn-success', value: true }
+    ],
+    'bg-success text-white'
+  );
+  
+  if (confirm) {
+    property.mortgaged = true;
+    player.money += mortgageValue;
+    this.addToLog(`${player.nick_name} hipotecó ${property.name} por $${mortgageValue}`);
+    this.renderPlayersPanel();
+    localStorage.setItem('monopoly_players', JSON.stringify(this.players));
+    
+    // Mensaje de confirmación
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await this.showModal(
+      '✅ Propiedad hipotecada',
+      `<p class="text-success">Hipotecaste <strong>${property.name}</strong></p>
+       <p>Recibiste: <strong>$${mortgageValue}</strong></p>
+       <p class="small mt-2">Dinero actual: <strong>$${player.money}</strong></p>`,
+      [{ text: 'Continuar', class: 'btn btn-success', value: true }],
+      'bg-success text-white'
+    );
+  }
+}
+
+async showUnmortgageOptions(playerIndex) {
+  const player = this.players[playerIndex];
+  
+  const mortgagedProps = (player.properties || []).filter(p => p.mortgaged);
+  
+  if (mortgagedProps.length === 0) {
+    await this.showModal(
+      'Sin propiedades hipotecadas',
+      '<p>No tienes propiedades hipotecadas en este momento.</p>',
+      [{ text: 'Entendido', class: 'btn btn-primary', value: true }],
+      'bg-info text-white'
+    );
+    return;
+  }
+  
+  let body = '<div class="unmortgage-options">';
+  body += '<p class="mb-3">Selecciona una propiedad para deshipotecar:</p>';
+  body += '<p class="small text-info mb-3">💡 Debes pagar el valor + 10% de interés</p>';
+  body += '<div class="list-group mb-3">';
+  
+  mortgagedProps.forEach(prop => {
+    const square = this.getSquareById(prop.id);
+    const mortgageValue = square?.mortgage || 0;
+    const unmortgageValue = Math.ceil(mortgageValue * 1.1);
+    const canAfford = player.money >= unmortgageValue;
+    
+    if (canAfford) {
+      body += `
+        <button class='list-group-item list-group-item-action d-flex justify-content-between align-items-center'
+                onclick='monopolyBoard.handleUnmortgageClick(${playerIndex}, ${prop.id}); return false;'>
+          <div>
+            <div>${prop.name}</div>
+            <small class='text-muted'>Hipotecada por $${mortgageValue}</small>
+          </div>
+          <span class='badge bg-primary'>-$${unmortgageValue}</span>
+        </button>
+      `;
+    } else {
+      body += `
+        <button class='list-group-item list-group-item-action d-flex justify-content-between align-items-center' disabled>
+          <div>
+            <div>${prop.name}</div>
+            <small class='text-muted'>Hipotecada por $${mortgageValue}</small>
+          </div>
+          <span class='badge bg-secondary'>❌ $${unmortgageValue}</span>
+        </button>
+      `;
+    }
+  });
+  
+  body += '</div>';
+  body += `<p class='small text-muted'>Tu dinero: <strong>$${player.money}</strong></p>`;
+  body += '<p class="small text-warning mt-2">⚠️ Las propiedades que no deshipoteques no contarán para el puntaje final.</p>';
+  body += '</div>';
+  
+  await this.showModal(
+    '🏠 Deshipotecar Propiedades',
+    body,
+    [{ text: 'Cerrar', class: 'btn btn-secondary', value: false }],
+    'bg-info text-white'
+  );
+}
+
+// Manejar clic en propiedad para deshipotecar
+async handleUnmortgageClick(playerIndex, propertyId) {
+  // Cerrar modal actual
+  const modal = document.getElementById('gameModal');
+  const bsModal = bootstrap.Modal.getInstance(modal);
+  if (bsModal) {
+    bsModal.hide();
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  const player = this.players[playerIndex];
+  const property = player.properties.find(p => p.id === propertyId);
+  
+  if (!property || !property.mortgaged) return;
+  
+  const square = this.getSquareById(propertyId);
+  const mortgageValue = square?.mortgage || 0;
+  const unmortgageValue = Math.ceil(mortgageValue * 1.1);
+  
+  if (player.money < unmortgageValue) {
+    await this.showModal(
+      'Dinero insuficiente',
+      `<p class="text-danger">No tienes suficiente dinero para deshipotecar.</p>
+       <p>Necesitas: <strong>$${unmortgageValue}</strong></p>
+       <p>Tienes: <strong>$${player.money}</strong></p>`,
+      [{ text: 'Entendido', class: 'btn btn-danger', value: true }],
+      'bg-danger text-white'
+    );
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await this.showUnmortgageOptions(playerIndex);
+    return;
+  }
+  
+  const confirm = await this.showModal(
+    '🏠 Deshipotecar Propiedad',
+    `<p>¿Deseas deshipotecar <strong>${property.name}</strong>?</p>
+     <p class="text-info mb-2">Valor hipotecado: <strong>$${mortgageValue}</strong></p>
+     <p class="text-danger">Pagarás: <strong>$${unmortgageValue}</strong></p>
+     <p class="small text-muted">(Valor original + 10% de interés)</p>
+     <p class="small mt-2">Tu dinero quedará en: <strong>$${player.money - unmortgageValue}</strong></p>`,
+    [
+      { text: 'Cancelar', class: 'btn btn-secondary', value: false },
+      { text: '💳 Deshipotecar', class: 'btn btn-primary', value: true }
+    ],
+    'bg-primary text-white'
+  );
+  
+  if (confirm) {
+    property.mortgaged = false;
+    player.money -= unmortgageValue;
+    this.addToLog(`${player.nick_name} deshipotecó ${property.name} por $${unmortgageValue}`);
+    this.renderPlayersPanel();
+    localStorage.setItem('monopoly_players', JSON.stringify(this.players));
+  }
+  
+  // Volver a mostrar opciones
+  await new Promise(resolve => setTimeout(resolve, 300));
+  await this.showUnmortgageOptions(playerIndex);
 }
 
   //Cambiar al siguiente jugador
